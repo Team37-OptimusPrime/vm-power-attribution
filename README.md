@@ -17,5 +17,29 @@ vm-power-attribution/
 └── configs/           # VM 및 실험 설정
 ```
 
-## Setup
-(TBD)
+## Documentation
+
+| 문서 | 설명 |
+|-----|------|
+| [docs/setup.md](docs/setup.md) | 환경 설정 가이드 |
+| [docs/experiment-plan.md](docs/experiment-plan.md) | 실험 설계 문서 |
+| [docs/experiment-log.md](docs/experiment-log.md) | 실험 수행 일지 |
+| [docs/references.md](docs/references.md) | 참고 문헌 |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | 문제 해결 가이드 |
+
+## Quick Start
+
+```bash
+# 1. Python 환경 설정
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 2. 상세 설정은 docs/setup.md 참조
+```
+
+## Hardware
+
+- **Host**: Alienware Aurora R12 (i7-11700KF, RTX 3060)
+- **Power Meter**: RPICT4V3 + Raspberry Pi
+- **Virtualization**: KVM/QEMU + libvirt
