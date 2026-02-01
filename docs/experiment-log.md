@@ -56,6 +56,101 @@ sudo apt install linux-tools-common linux-tools-generic powerstat -y
 
 ---
 
+## 2026-02-02 (Day 2)
+
+### 오늘의 목표
+- [x] RPICT 시스템 Raspberry Pi 설정
+- [x] Host 데이터 수집 스크립트 작성
+- [x] 첫 번째 CPU 스트레스 테스트 및 전력 측정
+
+### 진행 상황
+
+#### 1. RPICT 시스템 설정 (완료)
+
+**Raspberry Pi 환경**:
+- IP: 192.168.0.3 (추후 192.168.0.200으로 변경 예정)
+- RPICT4V3 펌웨어: V5.3.0 AVR_DB32
+- Baud rate: 38400 (자동 감지)
+
+**설치 과정**:
+```bash
+# lechacal 공식 패키지 설치
+wget lechacal.com/RPICT/tools/lcl-rpict-package_latest.deb
+sudo dpkg -i lcl-rpict-package_latest.deb
+
+# 데이터 읽기 테스트
+lcl-run
+```
+
+**RPICT 출력 형식** (lcl-run):
+```
+NodeID Power1 Power2 Power3 I1 I2 I3 I4 Vrms PF1 PF2
+11     -50.14 0.00   0.00   0.32 0.00 0.00 0.00 242.0 0.27 0.30
+```
+- Power1: Alienware 전력 (음수 = CT 방향, 절대값 사용)
+- Vrms: 전압 (~242V, 정상)
+- I1: 전류 (A)
+
+**이슈 해결**:
+- 시리얼 출력 깨짐 → `lcl-reset-rpict.py`로 해결
+- CT 센서가 Alienware 전원 케이블에 연결됨 확인
+
+#### 2. Host 측정 스크립트 작성 (완료)
+
+**생성된 스크립트**:
+- `scripts/measurement/host_logger.py`: RAPL + nvidia-smi + CPU 사용률 로깅
+- `scripts/measurement/rpict_logger.py`: RPICT 데이터 타임스탬프 로깅
+
+**host_logger.py 기능**:
+- RAPL 에너지 카운터 읽기 (package, core, dram)
+- nvidia-smi GPU 전력/온도/사용률
+- CPU 사용률 (/proc/stat 기반)
+- 1초 간격 CSV 출력
+
+#### 3. CPU 스트레스 테스트 (실험 ID: T-01)
+
+**설정**:
+- 워크로드: `stress-ng --cpu 0 --timeout 30s` (3회 반복)
+- 측정 시간: 약 3분 (idle → stress → idle 반복)
+- 동시 로깅: Host (host_logger.py) + RPICT (lcl-run)
+
+**결과 데이터 파일**:
+- `data/raw/host_stress_test.csv` (157 records)
+- `data/raw/rpict_gpu_test.csv` (52 records)
+
+**측정 결과**:
+
+| 상태 | RPICT 실측 (W) | RAPL Package (W) | 차이 (W) | 비고 |
+|------|---------------|------------------|----------|------|
+| Idle | 31-35 | 2-3 | ~30 | PSU+마더보드+기타 |
+| CPU 100% | 218-230 | 125-130 | ~95 | PSU 효율 ~57% |
+
+**분석**:
+1. **RPICT vs RAPL 상관관계 확인**: CPU 부하 증가 시 둘 다 비례 증가
+2. **PSU 효율 추정**:
+   - CPU 부하 증가분: RAPL ~123W, RPICT ~193W
+   - 효율: 123/193 ≈ 64% (예상보다 낮음, 추가 분석 필요)
+3. **GPU는 idle 유지**: stress-ng --gpu 미지원으로 GPU 부하 테스트 별도 필요
+
+**타임스탬프 동기화 이슈**:
+- Host: 전체 ISO 타임스탬프 (2026-02-02T00:29:30.651)
+- RPICT: 시간만 (00:29:28)
+- → 추후 NTP 동기화 및 날짜 포함 필요
+
+### 다음 단계
+1. RPICT 로깅에 날짜 포함
+2. GPU 부하 테스트 (glmark2 또는 PyTorch)
+3. VM 생성 및 베이스라인 측정
+4. 라즈베리파이 고정 IP 변경 (192.168.0.200)
+
+### 메모
+- stress-ng은 GPU 옵션 미지원 (버전 문제)
+- gpu-burn은 CUDA/GCC 버전 호환 문제로 컴파일 실패
+- glmark2 또는 PyTorch로 GPU 부하 테스트 예정
+- RPICT 측정값과 RAPL 측정값 차이가 생각보다 큼 (PSU 효율 + 기타 부품)
+
+---
+
 ## Template: 새 실험 기록용
 
 ```markdown
@@ -115,7 +210,8 @@ sudo apt install linux-tools-common linux-tools-generic powerstat -y
 
 | 날짜 | 실험 ID | 시나리오 | RPICT (W) | RAPL (W) | GPU (W) | 비고 |
 |-----|---------|---------|-----------|----------|---------|------|
-| - | - | - | - | - | - | 데이터 수집 전 |
+| 2026-02-02 | T-01 | Host idle (no VM) | 31-35 | 2-3 | 6.5 | 베이스라인 |
+| 2026-02-02 | T-01 | CPU stress (stress-ng) | 218-230 | 125-130 | 6.5 | CPU 풀로드 |
 
 ---
 
@@ -123,4 +219,6 @@ sudo apt install linux-tools-common linux-tools-generic powerstat -y
 
 | ID | 날짜 | 이슈 | 상태 | 해결 방법 |
 |----|-----|------|------|----------|
-| - | - | - | - | - |
+| I-01 | 2026-02-02 | lcl-run 출력 깨짐 | 해결 | lcl-reset-rpict.py 실행 |
+| I-02 | 2026-02-02 | RPICT baud rate 혼동 (9600 vs 38400) | 해결 | lcl-run이 자동 감지 |
+| I-03 | 2026-02-02 | gpu-burn 컴파일 실패 | 미해결 | CUDA/GCC 버전 불일치, 대안 사용 |
