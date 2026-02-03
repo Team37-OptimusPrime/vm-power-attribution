@@ -10,6 +10,7 @@
 **핵심 질문**: 다중 VM이 동시 실행될 때 발생하는 전력 간섭 효과를 측정하고, 각 VM에 공정하게 전력을 귀속시키는 알고리즘을 개발한다.
 
 **가설**:
+
 - H1: P_total(VM_A + VM_B) ≠ P_A(solo) + P_B(solo) (간섭으로 인한 비선형성 존재)
 - H2: 간섭 효과는 워크로드 유형(CPU-bound vs GPU-bound)에 따라 다름
 - H3: Shapley value 기반 귀속이 단순 비례 배분보다 공정함
@@ -50,18 +51,21 @@
 ## 3. 측정 체계 (Three-Layer Architecture)
 
 ### Layer 1: Physical Power (Ground Truth)
+
 - **도구**: RPICT4V3 (CT 센서 + AC 어댑터)
 - **측정 대상**: 벽면 AC 전력 (시스템 전체)
 - **샘플링**: ~1Hz
 - **포함 요소**: CPU + GPU + PSU 손실 + 마더보드 + 팬 + 모든 부품
 
 ### Layer 2: Component-Level Software
+
 - **CPU/Memory**: Intel RAPL (Package, Core, Uncore, DRAM)
 - **GPU**: nvidia-smi power.draw
 - **샘플링**: 1-10Hz
 - **한계**: 추정값이며, 실제 전력과 차이 있음
 
 ### Layer 3: VM Attribution (연구 핵심)
+
 - **입력**: Layer 1 + Layer 2 + VM 리소스 할당 정보
 - **출력**: 각 VM별 전력 소비 추정치
 - **알고리즘**: Proportional, Shapley, ML-based, Marginal cost
@@ -103,12 +107,14 @@
 | M-09 | 4 VMs | 다양한 조합 | 최대 부하 테스트 |
 
 **핵심 분석**:
+
 - 간섭 계수 = (P_total - P_idle) / (P_A_solo + P_B_solo - 2*P_idle)
 - 1.0 = 간섭 없음, >1.0 = 추가 전력 소모, <1.0 = 효율 개선
 
 ### Phase 4: Attribution Algorithm Validation
 
 각 알고리즘에 대해:
+
 1. Multi-VM 실험 데이터에 적용
 2. 단일 VM 측정값과 비교 (Ground Truth)
 3. 오차 분석 (MAE, RMSE, MAPE)
@@ -118,6 +124,7 @@
 ## 5. 데이터 수집 프로토콜
 
 ### 5.1 실험 전 체크리스트
+
 - [ ] 시스템 재부팅 후 10분 안정화
 - [ ] 불필요한 백그라운드 프로세스 종료
 - [ ] 시간 동기화 확인 (NTP/PTP)
@@ -127,24 +134,28 @@
 ### 5.2 데이터 형식
 
 **RPICT 로그** (`data/raw/rpict/`):
+
 ```csv
 timestamp,node_id,power_w,voltage_v,current_a,power_factor
 2026-02-01T10:00:00.000,1,145.2,220.1,0.66,0.99
 ```
 
 **RAPL 로그** (`data/raw/rapl/`):
+
 ```csv
 timestamp,package_j,core_j,uncore_j,dram_j,package_w,core_w,uncore_w,dram_w
 2026-02-01T10:00:00.000,1234.56,890.12,123.45,234.56,45.2,32.1,5.6,8.9
 ```
 
 **GPU 로그** (`data/raw/nvidia/`):
+
 ```csv
 timestamp,gpu_id,power_w,temp_c,util_gpu,util_mem,mem_used_mb
 2026-02-01T10:00:00.000,0,85.5,65,78,45,4096
 ```
 
 **VM 메트릭** (`data/raw/vm_metrics/`):
+
 ```csv
 timestamp,vm_name,vcpu_count,cpu_percent,mem_used_mb,mem_total_mb
 2026-02-01T10:00:00.000,vm1,4,75.2,8192,16384
@@ -162,18 +173,21 @@ timestamp,vm_name,vcpu_count,cpu_percent,mem_used_mb,mem_total_mb
 ## 6. 분석 계획
 
 ### 6.1 데이터 전처리
+
 1. 타임스탬프 기준 모든 소스 병합
 2. 이상치 제거 (3σ 규칙)
 3. 리샘플링 (1Hz 통일)
 4. 결측치 보간 (선형)
 
 ### 6.2 시각화
+
 - 시계열 전력 그래프 (RPICT vs RAPL+nvidia-smi)
 - 박스플롯 (워크로드별 전력 분포)
 - 히트맵 (간섭 행렬)
 - 산점도 (예측 vs 실제)
 
 ### 6.3 통계 분석
+
 - t-test: 단독 vs 동시 실행 전력 차이 유의성
 - ANOVA: 워크로드 유형별 전력 차이
 - 회귀 분석: 리소스 사용량 → 전력 예측
@@ -215,4 +229,4 @@ timestamp,vm_name,vcpu_count,cpu_percent,mem_used_mb,mem_total_mb
 
 | 날짜 | 변경 내용 | 작성자 |
 |-----|----------|-------|
-| 2026-02-01 | 최초 작성 | Team 37 |
+| 2026-02-01 | 최초 작성 | Woorim Shin |
