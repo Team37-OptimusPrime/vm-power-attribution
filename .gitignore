@@ -17,5 +17,9 @@ __pycache__/
 # CSV data files (anywhere in repo)
 *.csv
 
+# Virtual environment
+venv/
+.venv/
+
 # OS
 .DS_Store
