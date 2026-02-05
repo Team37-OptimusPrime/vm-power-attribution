@@ -345,11 +345,126 @@ find data/raw -mtime +7 -name "*.csv" -exec gzip {} \;
 
 ---
 
+## 6. 실험 스크립트 이슈
+
+### 6.1 RAPL 값이 0으로 표시
+
+**증상**: host_logger.py 출력에서 rapl_package_w가 항상 0.00
+
+```
+2026-02-05T23:03:08.895,3.1,0.00,0.00,0.00,7.70,27,7
+```
+
+**원인**: 일반 사용자에게 RAPL energy_uj 파일 읽기 권한 없음
+
+**해결**:
+
+```bash
+# 권한 부여 (세션 동안 유효)
+sudo chmod o+r /sys/class/powercap/intel-rapl/*/energy_uj
+sudo chmod o+r /sys/class/powercap/intel-rapl/*/*/energy_uj
+
+# 확인
+cat /sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj
+```
+
+---
+
+### 6.2 lcl-run Python subprocess 실행 실패
+
+**증상**:
+
+```
+OSError: [Errno 8] Exec format error: 'lcl-run'
+```
+
+**원인**: lcl-run이 shell script인데 Python subprocess가 바이너리로 직접 실행 시도
+
+**해결**:
+
+```python
+# 변경 전
+proc = subprocess.Popen(['lcl-run'], ...)
+
+# 변경 후
+proc = subprocess.Popen('lcl-run', shell=True, ...)
+```
+
+---
+
+### 6.3 Node.js Express 모듈 오류
+
+**증상**:
+
+```
+Error: Cannot find module 'node:events'
+```
+
+**원인**: Node.js 버전이 너무 오래됨 (v12). Express 최신 버전은 Node.js 14.18+ 필요
+
+**해결**:
+
+```bash
+# 충돌 패키지 제거
+sudo apt remove libnode-dev libnode72 nodejs -y
+sudo apt autoremove -y
+
+# Node.js 18 설치
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Express 재설치
+cd ~/vm-power-attribution/scripts/workloads
+rm -rf node_modules
+npm install express
+```
+
+---
+
+### 6.4 실험 스크립트가 Node.js phase에서 멈춤
+
+**증상**: nodejs_solo.csv 로깅 완료 후 concurrent phase로 진행 안 됨
+
+**원인**: `wait` 명령이 인자 없이 호출되어 **모든** 백그라운드 프로세스 대기
+
+```bash
+# 문제 코드
+while [ $SECONDS -lt $END_TIME ]; do
+    for i in {1..50}; do
+        curl -s http://localhost:3000/ > /dev/null &
+    done
+    wait  # ← 로거, 서버까지 전부 대기!
+done
+```
+
+**해결**:
+
+```bash
+# 수정 코드 - curl PID만 수집하여 개별 대기
+while [ $SECONDS -lt $END_TIME ]; do
+    CURL_PIDS=""
+    for i in {1..20}; do
+        curl -s --max-time 2 http://localhost:3000/ > /dev/null &
+        CURL_PIDS="$CURL_PIDS $!"
+    done
+    sleep 0.5
+    for pid in $CURL_PIDS; do
+        wait $pid 2>/dev/null || true
+    done
+done
+```
+
+---
+
 ## 이슈 히스토리
 
 | 날짜 | 이슈 | 해결 | 소요 시간 |
 |-----|------|------|----------|
-| - | - | - | - |
+| 2026-02-02 | lcl-run 출력 깨짐 | lcl-reset-rpict.py 실행 | 30분 |
+| 2026-02-05 | RAPL 0.00W 표시 | chmod o+r 권한 부여 | 10분 |
+| 2026-02-05 | lcl-run subprocess 실패 | shell=True 사용 | 15분 |
+| 2026-02-05 | Node.js Express 모듈 오류 | Node.js 18 업그레이드 | 20분 |
+| 2026-02-05 | 스크립트 wait 멈춤 | PID별 개별 wait | 30분 |
 
 ---
 
@@ -358,3 +473,4 @@ find data/raw -mtime +7 -name "*.csv" -exec gzip {} \;
 | 날짜 | 변경 내용 | 작성자 |
 |-----|----------|-------|
 | 2026-02-01 | 최초 작성 | Woorim Shin |
+| 2026-02-05 | 실험 스크립트 이슈 섹션 추가 (6.1-6.4) | Claude |

@@ -325,3 +325,8 @@ sudo chmod o+r /sys/class/powercap/intel-rapl/*/*/energy_uj
 | I-01 | 2026-02-02 | lcl-run 출력 깨짐 | 해결 | lcl-reset-rpict.py 실행 |
 | I-02 | 2026-02-02 | RPICT baud rate 혼동 (9600 vs 38400) | 해결 | lcl-run이 자동 감지 |
 | I-03 | 2026-02-02 | gpu-burn 컴파일 실패 | 미해결 | CUDA/GCC 버전 불일치, 대안 사용 |
+| I-04 | 2026-02-05 | RAPL 권한 문제 (0.00W 표시) | 해결 | chmod o+r 권한 부여 |
+| I-05 | 2026-02-05 | lcl-run Python subprocess 실패 | 해결 | shell=True 사용 |
+| I-06 | 2026-02-05 | 폴더 이원화 (vm-power-exp vs vm-power-attribution) | 해결 | git repo로 통일 |
+| I-07 | 2026-02-05 | Node.js Express 모듈 오류 (node:events) | 해결 | Node.js 18 업그레이드 |
+| I-08 | 2026-02-05 | 실험 스크립트 wait 멈춤 | 해결 | curl PID별 개별 wait |
