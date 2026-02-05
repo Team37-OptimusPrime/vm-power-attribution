@@ -1,19 +1,19 @@
 # Experiment Plan: VM-level Power Attribution
 
-> 최종 수정: 2026-02-01
+> 최종 수정: 2026-02-03 (Lab Meeting 피드백 반영)
 > 작성자: Team 37 - OptimusPrime
 
 ---
 
 ## 1. 연구 목표
 
-**핵심 질문**: 다중 VM이 동시 실행될 때 발생하는 전력 간섭 효과를 측정하고, 각 VM에 공정하게 전력을 귀속시키는 알고리즘을 개발한다.
+**핵심 주장**: 클라우드 사업자가 자원 할당량 기준으로 과금하는 현행 방식과 에너지 사용량 기준 과금은 일치하지 않으며, 에너지 기반 과금 모델이 필요하다.
 
-**가설**:
+**가설** (2026-02-03 Lab Meeting 반영):
 
-- H1: P_total(VM_A + VM_B) ≠ P_A(solo) + P_B(solo) (간섭으로 인한 비선형성 존재)
-- H2: 간섭 효과는 워크로드 유형(CPU-bound vs GPU-bound)에 따라 다름
-- H3: Shapley value 기반 귀속이 단순 비례 배분보다 공정함
+- H1: 동일 자원 할당을 받은 VM_A(AI)와 VM_B(Web)의 에너지 소비는 현저히 다르다
+- H2: RAPL+nvidia-smi+cgroup 기반 에너지 귀속 모델이 실측(RPICT)과 높은 일치도를 보인다
+- H3: 에너지 기반 과금은 워크로드 특성에 따라 자원 기반 과금과 최대 N배 차이난다
 
 ---
 
@@ -82,42 +82,51 @@
 | B-02 | 단일 VM idle | RPICT, RAPL, nvidia-smi | VM 오버헤드 파악 |
 | B-03 | 부하별 전력 곡선 | RPICT vs (RAPL + nvidia-smi) | PSU 효율 추정 |
 
-### Phase 2: Single VM Profiling
+### Phase 2: 컴포넌트별 에너지 분리 (간접 측정)
 
-| 실험 ID | 워크로드 | 리소스 | 측정 시간 |
-|---------|---------|--------|----------|
-| S-01 | CPU stress (stress-ng) | 2/4/6/8 cores | 각 5분 |
-| S-02 | GPU stress (gpu-burn) | 25/50/75/100% | 각 5분 |
-| S-03 | ResNet18 training | 기본 설정 | 10 epochs |
-| S-04 | ResNet50 training | 기본 설정 | 10 epochs |
-| S-05 | Inference batch | batch=1,8,32,64 | 각 1000회 |
+| 실험 ID | 시나리오 | 측정 | 목적 |
+|---------|---------|------|------|
+| C-01 | 완전 Idle | RPICT + RAPL + nvidia-smi | E_base + E_mem_idle 분리 |
+| C-02 | CPU only stress | RPICT + RAPL | E_cpu 분리, RAPL 검증 |
+| C-03 | GPU only stress | RPICT + nvidia-smi | E_gpu 분리 |
+| C-04 | IO only stress | RPICT + iostat | E_storage 분리 |
+| C-05 | CPU + GPU 동시 | RPICT + RAPL + nvidia-smi | 합산 검증 |
 
-### Phase 3: Multi-VM Interference (핵심 실험)
+### Phase 3: 워크로드별 에너지 프로파일링
 
-| 실험 ID | VM 구성 | 워크로드 조합 | 측정 항목 |
-|---------|--------|--------------|----------|
-| M-01 | VM-A solo | CPU stress | P_A |
-| M-02 | VM-B solo | CPU stress | P_B |
-| M-03 | VM-A + VM-B | CPU stress 동시 | P_total, 간섭 분석 |
-| M-04 | VM-A solo | GPU training | P_A |
-| M-05 | VM-B solo | GPU training | P_B |
-| M-06 | VM-A + VM-B | GPU training 동시 | P_total, GPU 경합 |
-| M-07 | VM-A + VM-B | CPU + GPU 혼합 | 이종 워크로드 간섭 |
-| M-08 | 3 VMs | 다양한 조합 | 확장성 테스트 |
-| M-09 | 4 VMs | 다양한 조합 | 최대 부하 테스트 |
+**워크로드** (Lab Meeting 피드백 반영 - 실제 애플리케이션 사용):
+- **AI/GPU-heavy**: ResNet-50 v1.5 Inference (MLPerf 표준)
+- **전통적/Light**: NGINX + wrk 웹서빙 (CloudSuite 표준)
 
-**핵심 분석**:
+| 실험 ID | VM 구성 | 워크로드 | 측정 항목 |
+|---------|--------|---------|----------|
+| W-01 | VM-A solo | ResNet-50 Inference | CPU%, GPU%, E_rapl, E_gpu, E_rpict |
+| W-02 | VM-B solo | NGINX + wrk (저부하) | CPU%, GPU%, E_rapl, E_gpu, E_rpict |
+| W-03 | VM-A + VM-B 동시 | ResNet-50 + NGINX | E_total, VM별 분배 |
 
-- 간섭 계수 = (P_total - P_idle) / (P_A_solo + P_B_solo - 2*P_idle)
-- 1.0 = 간섭 없음, >1.0 = 추가 전력 소모, <1.0 = 효율 개선
+### Phase 4: 검증 실험 (핵심 - 교수님 제시)
 
-### Phase 4: Attribution Algorithm Validation
+**방법**: A solo / B solo / A+B 동시 비교
 
-각 알고리즘에 대해:
+| 실험 ID | 구성 | 목적 |
+|---------|------|------|
+| V-01 | VM-A만 (ResNet-50) | E(A_solo) 측정 |
+| V-02 | VM-B만 (NGINX) | E(B_solo) 측정 |
+| V-03 | VM-A + VM-B 동시 | E(A+B) 측정 + 모델로 분배 |
+| V-04 | 검증 | E(A_share) ≈ E(A_solo), E(B_share) ≈ E(B_solo) 확인 |
 
-1. Multi-VM 실험 데이터에 적용
-2. 단일 VM 측정값과 비교 (Ground Truth)
-3. 오차 분석 (MAE, RMSE, MAPE)
+**핵심 그래프** (논문 핵심):
+- 자원 기반 과금 (50:50) vs 에너지 기반 과금 (80:20) 비교
+
+### Phase 5: 에너지 기반 과금 모델
+
+에너지 귀속 모델 적용:
+```
+E(VM_i) = E_cpu(VM_i) + E_gpu(VM_i) + E_mem(VM_i) + E_storage(VM_i)
+```
+
+오차 분석: MAE, RMSE, MAPE
+자원 과금 vs 에너지 과금 비교 그래프 도출
 
 ---
 
@@ -230,3 +239,4 @@ timestamp,vm_name,vcpu_count,cpu_percent,mem_used_mb,mem_total_mb
 | 날짜 | 변경 내용 | 작성자 |
 |-----|----------|-------|
 | 2026-02-01 | 최초 작성 | Woorim Shin |
+| 2026-02-03 | Lab Meeting 피드백 반영: 워크로드 변경(실제 앱), 에너지 모델 구체화, 검증 실험 추가 | Woorim Shin |
