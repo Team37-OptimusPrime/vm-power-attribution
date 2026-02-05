@@ -87,13 +87,14 @@ def main():
     line_count = 0
 
     try:
-        # lcl-run 실행 (전체 경로 사용)
+        # lcl-run 실행 (shell script이므로 shell=True 사용)
         proc = subprocess.Popen(
-            ['/usr/local/bin/lcl-run'],
+            'lcl-run',
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1
+            bufsize=1,
+            shell=True
         )
 
         for line in proc.stdout:
