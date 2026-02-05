@@ -10,6 +10,40 @@
 
 set -e
 
+# Helper: Process Wait with Timeout & Zombie Check
+wait_safe() {
+    local pid=$1
+    local name=$2
+    local timeout=${3:-15} # Default timeout 15s
+    
+    log "Waiting for $name (PID $pid) to finish..."
+    
+    local count=0
+    while kill -0 $pid 2>/dev/null; do
+        # Check if process is Zombie (Z) or Defunct
+        # ps output format: STAT column. Z means zombie.
+        local state=$(ps -p $pid -o stat= 2>/dev/null || echo "?")
+        if [[ "$state" == *"Z"* ]]; then
+            # It's a zombie, wait will return immediately
+            break
+        fi
+        
+        sleep 1
+        count=$((count+1))
+        
+        if [ $count -ge $timeout ]; then
+            warn "$name (PID $pid) did not exit after ${timeout}s. Force killing..."
+            kill -SIGTERM $pid 2>/dev/null || true
+            sleep 2
+            kill -SIGKILL $pid 2>/dev/null || true
+            break
+        fi
+    done
+    
+    wait $pid 2>/dev/null || true
+    log "$name (PID $pid) finished/reaped."
+}
+
 EXP_NAME=${1:-"exp_v2_$(date +%Y%m%d_%H%M%S)"}
 BASE_DIR="$HOME/vm-power-attribution"
 LOG_DIR="$BASE_DIR/data/raw/phase1/$EXP_NAME"
@@ -93,7 +127,7 @@ while [ $SECONDS -lt $END_TIME ]; do
     taskset -c $CPU_CORES yolo predict model=yolov8n.pt source=test_video.mp4 device=0 verbose=False 2>/dev/null || true
 done
 
-wait $LOGGER_PID 2>/dev/null || true
+wait_safe $LOGGER_PID "Phase 1 Logger"
 deactivate 2>/dev/null || true
 
 log "YOLO solo complete. Cooling down ${COOLDOWN}s..."
@@ -109,6 +143,7 @@ info "CPU cores: $CPU_CORES (taskset)"
 cd "$NODE_DIR"
 taskset -c $CPU_CORES node server.js &
 NODE_PID=$!
+info "Node.js server PID: $NODE_PID"
 sleep 2
 
 # 로거 시작
@@ -132,7 +167,11 @@ while [ $SECONDS -lt $END_TIME ]; do
     done
 done
 
-wait $LOGGER_PID 2>/dev/null || true
+# Wait for logger safely
+wait_safe $LOGGER_PID "Phase 2 Logger" 20
+
+# Kill Node.js
+log "Stopping Node.js server..."
 kill $NODE_PID 2>/dev/null || true
 
 log "Node.js solo complete. Cooling down ${COOLDOWN}s..."
@@ -181,8 +220,10 @@ while [ $SECONDS -lt $END_TIME ]; do
     done
 done
 
-wait $YOLO_PID 2>/dev/null || true
-wait $LOGGER_PID 2>/dev/null || true
+info "Waiting for workloads to finish..."
+wait_safe $YOLO_PID "Phase 3 YOLO"
+wait_safe $LOGGER_PID "Phase 3 Logger" 20
+
 kill $NODE_PID 2>/dev/null || true
 deactivate 2>/dev/null || true
 
