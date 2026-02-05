@@ -5,11 +5,11 @@
 set -e
 
 EXP_NAME=${1:-"exp_$(date +%Y%m%d_%H%M%S)"}
-BASE_DIR="$HOME/vm-power-exp"
-LOG_DIR="$BASE_DIR/logs/$EXP_NAME"
-YOLO_DIR="$BASE_DIR/workloads/yolo"
-NODE_DIR="$BASE_DIR/workloads/nodejs"
-SCRIPT_DIR="$BASE_DIR/scripts"
+BASE_DIR="$HOME/vm-power-attribution"
+LOG_DIR="$BASE_DIR/data/raw/phase1/$EXP_NAME"
+YOLO_DIR="$BASE_DIR/scripts/workloads"
+NODE_DIR="$BASE_DIR/scripts/workloads"
+SCRIPT_DIR="$BASE_DIR/scripts/measurement"
 
 # 색상
 RED='\033[0;31m'
@@ -50,7 +50,7 @@ sleep 2  # 로거 안정화
 
 # YOLO 실행
 cd "$YOLO_DIR"
-source optimusVM/bin/activate
+source yolo_venv/bin/activate
 
 log "Starting YOLO inference..."
 # 반복 실행하여 duration 동안 유지
@@ -115,7 +115,7 @@ sleep 2
 
 # YOLO 시작 (백그라운드)
 cd "$YOLO_DIR"
-source optimusVM/bin/activate
+source yolo_venv/bin/activate
 (
     END_TIME=$((SECONDS + WORKLOAD_DURATION - 5))
     while [ $SECONDS -lt $END_TIME ]; do

@@ -20,6 +20,16 @@ __pycache__/
 # Virtual environment
 venv/
 .venv/
+*_venv/
+
+# Node.js
+node_modules/
+package-lock.json
+
+# Test data / large files
+*.mp4
+*.avi
+*.mkv
 
 # OS
 .DS_Store
