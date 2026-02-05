@@ -309,6 +309,8 @@ def main():
         if outfile:
             outfile.close()
             print(f"\n[INFO] Saved {line_count} records to {args.output}")
+        # Force exit to avoid hanging on thread/buffer cleanup
+        os._exit(0)
 
 
 if __name__ == '__main__':
