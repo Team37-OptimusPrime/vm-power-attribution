@@ -188,22 +188,23 @@ sleep 2  # 로거 안정화
 # YOLO 실행 (cgroup 내에서)
 cd "$WORKLOAD_DIR"
 if [ -d "yolo_venv" ]; then
-    source yolo_venv/bin/activate
-
     log "YOLO 추론 시작 (yolo.slice cgroup)..."
 
-    # 서브쉘에서 cgroup 할당 후 실행
-    (
-        echo $$ > "$YOLO_CGROUP/cgroup.procs" 2>/dev/null || true
-        END_TIME=$((SECONDS + WORKLOAD_DURATION - 5))
-        while [ $SECONDS -lt $END_TIME ]; do
-            yolo predict model=yolov8n.pt source=test_video.mp4 device=0 verbose=False 2>/dev/null || true
-        done
-    ) &
+    # systemd-run을 사용하여 모든 자식 프로세스를 cgroup에 포함
+    # --scope: 일시적 scope unit 생성
+    # --slice=yolo.slice: yolo.slice cgroup에 할당
+    # 이 방식은 yolo가 생성하는 모든 자식 프로세스도 cgroup에 포함시킴
+    sudo systemd-run --scope --slice=yolo.slice --uid=$(id -u) --gid=$(id -g) \
+        bash -c "
+            source $WORKLOAD_DIR/yolo_venv/bin/activate
+            END_TIME=\$((SECONDS + $WORKLOAD_DURATION - 5))
+            while [ \$SECONDS -lt \$END_TIME ]; do
+                yolo predict model=yolov8n.pt source=test_video.mp4 device=0 verbose=False 2>/dev/null || true
+            done
+        " &
     YOLO_PID=$!
 
     wait $YOLO_PID 2>/dev/null || true
-    deactivate 2>/dev/null || true
 else
     warn "yolo_venv 없음, YOLO 스킵"
     sleep $WORKLOAD_DURATION
@@ -291,15 +292,16 @@ sleep 2
 
 # YOLO 시작 (yolo.slice)
 if [ -d "yolo_venv" ]; then
-    source yolo_venv/bin/activate
+    log "YOLO 추론 시작 (concurrent, yolo.slice cgroup)..."
 
-    (
-        echo $$ > "$YOLO_CGROUP/cgroup.procs" 2>/dev/null || true
-        END_TIME=$((SECONDS + WORKLOAD_DURATION - 5))
-        while [ $SECONDS -lt $END_TIME ]; do
-            yolo predict model=yolov8n.pt source=test_video.mp4 device=0 verbose=False 2>/dev/null || true
-        done
-    ) &
+    sudo systemd-run --scope --slice=yolo.slice --uid=$(id -u) --gid=$(id -g) \
+        bash -c "
+            source $WORKLOAD_DIR/yolo_venv/bin/activate
+            END_TIME=\$((SECONDS + $WORKLOAD_DURATION - 5))
+            while [ \$SECONDS -lt \$END_TIME ]; do
+                yolo predict model=yolov8n.pt source=test_video.mp4 device=0 verbose=False 2>/dev/null || true
+            done
+        " &
     YOLO_PID=$!
 fi
 
@@ -326,7 +328,6 @@ wait $YOLO_PID 2>/dev/null || true
 wait $CURL_GEN_PID 2>/dev/null || true
 wait $HOST_LOGGER_PID $CGROUP_LOGGER_PID 2>/dev/null || true
 
-deactivate 2>/dev/null || true
 kill $NODE_PID 2>/dev/null || true
 
 ########################################
