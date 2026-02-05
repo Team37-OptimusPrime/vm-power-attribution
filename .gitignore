@@ -31,5 +31,14 @@ package-lock.json
 *.avi
 *.mkv
 
+# Images and documents (add manually when needed with git add -f)
+*.png
+*.pdf
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.eps
+
 # OS
 .DS_Store
