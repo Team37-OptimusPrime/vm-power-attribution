@@ -151,6 +151,106 @@ NodeID Power1 Power2 Power3 I1 I2 I3 I4 Vrms PF1 PF2
 
 ---
 
+## 2026-02-05 (Day 5)
+
+### 오늘의 목표
+- [x] Phase 1 실험 환경 구축 (YOLO vs Node.js)
+- [x] Host에서 가설 검증 실험 수행
+- [x] 실험 결과 시각화
+
+### 진행 상황
+
+#### 1. 랩미팅 피드백 반영 (2/3 미팅 기반)
+
+**핵심 방향 재설정**:
+- "자원 기반 과금 ≠ 에너지 기반 과금" 가설 검증
+- 마이크로벤치마크(stress-ng) 대신 실제 워크로드 사용
+- Host에서 먼저 검증 → VM으로 확장
+
+**선정 워크로드**:
+- AI 워크로드: YOLOv8 Nano (부지도교수님 제안)
+- Non-AI 워크로드: Node.js Express + curl 부하
+
+#### 2. 실험 환경 구축
+
+**Alienware 설정**:
+```bash
+# YOLO 환경
+python3 -m venv yolo_venv
+pip install ultralytics
+
+# Node.js 환경
+npm install express
+
+# RAPL 권한 수정
+sudo chmod o+r /sys/class/powercap/intel-rapl/*/energy_uj
+sudo chmod o+r /sys/class/powercap/intel-rapl/*/*/energy_uj
+```
+
+**자동화 스크립트 작성**:
+- `scripts/workloads/run_experiment.sh`: 4단계 자동 실험
+- `scripts/workloads/server.js`: Express 서버
+
+#### 3. Phase 1 실험 수행 (실험 ID: P1-01)
+
+**설정**:
+- 플랫폼: Host (VM 분리 없음)
+- 측정: RAPL (CPU) + nvidia-smi (GPU) + RPICT (벽면 전력)
+- 각 phase 60초, 1초 간격 샘플링
+
+**실험 단계**:
+| Phase | 워크로드 | 시간 |
+|-------|---------|------|
+| 0 | Baseline (Idle) | 30s |
+| 1 | YOLO Solo | 60s |
+| 2 | Node.js Solo | 60s |
+| 3 | YOLO + Node.js | 60s |
+
+**측정 결과**:
+
+| Phase | CPU % | CPU Power (W) | GPU Power (W) | Total (W) |
+|-------|-------|---------------|---------------|-----------|
+| Idle | 4.0 | 5.1 ± 0.8 | 8.5 ± 0.6 | 13.5 |
+| **YOLO (AI)** | 7.3 | **29.2 ± 8.3** | **36.2 ± 11.2** | **65.4** |
+| **Node.js** | 4.0 | 5.6 ± 1.2 | 8.4 ± 0.5 | 14.0 |
+| Concurrent | 7.4 | 29.3 ± 8.1 | 36.7 ± 11.3 | 66.0 |
+
+**핵심 발견**:
+- YOLO(AI)는 Node.js(Non-AI) 대비 **4.7배** 더 많은 전력 소비
+- CPU: 5.2배 (29.2W vs 5.6W)
+- GPU: 4.3배 (36.2W vs 8.4W)
+- **동일 리소스 할당 시에도 에너지 소비는 크게 다름** → 가설 검증 성공
+
+#### 4. 시각화 (완료)
+
+생성된 그래프:
+- `docs/figures/phase1/power_comparison.png`: 전력 비교 바 차트
+- `docs/figures/phase1/timeseries.png`: 시계열 그래프
+- `docs/figures/phase1/energy_attribution.png`: 에너지 귀속 파이 차트
+- `docs/figures/phase1/key_finding.png`: 핵심 발견 그래프 (논문용)
+
+### 이슈 및 해결
+
+| ID | 이슈 | 상태 | 해결 |
+|----|-----|------|------|
+| I-04 | RAPL 권한 문제 (0.00W) | 해결 | chmod o+r 권한 부여 |
+| I-05 | lcl-run Python subprocess 실패 | 해결 | shell=True 사용 |
+| I-06 | vm-power-exp / vm-power-attribution 폴더 이원화 | 해결 | git repo로 통일 |
+
+### 다음 단계
+1. VM 분리 환경 구축 (KVM)
+2. cgroup v2 기반 프로세스별 리소스 측정
+3. 교수님께 중간 결과 이메일 보고
+4. 논문 구조 초안 작성
+
+### 메모
+- VM 분리 없이 Host에서도 핵심 가설 검증 완료
+- RAPL core/dram은 0W로 표시됨 (i7-11700KF 특성? 추가 조사 필요)
+- Node.js는 curl 부하에도 GPU를 거의 사용하지 않음 (예상대로)
+- YOLO는 짧은 비디오 반복 추론으로 GPU 사용률 변동 큼 (30-50W)
+
+---
+
 ## Template: 새 실험 기록용
 
 ```markdown
@@ -212,6 +312,9 @@ NodeID Power1 Power2 Power3 I1 I2 I3 I4 Vrms PF1 PF2
 |-----|---------|---------|-----------|----------|---------|------|
 | 2026-02-02 | T-01 | Host idle (no VM) | 31-35 | 2-3 | 6.5 | 베이스라인 |
 | 2026-02-02 | T-01 | CPU stress (stress-ng) | 218-230 | 125-130 | 6.5 | CPU 풀로드 |
+| 2026-02-05 | P1-01 | YOLO solo (Host) | ~100-140 | 29.2 | 36.2 | AI 워크로드 |
+| 2026-02-05 | P1-01 | Node.js solo (Host) | ~35-40 | 5.6 | 8.4 | Non-AI 워크로드 |
+| 2026-02-05 | P1-01 | YOLO + Node.js (Host) | ~100-140 | 29.3 | 36.7 | 동시 실행 |
 
 ---
 
