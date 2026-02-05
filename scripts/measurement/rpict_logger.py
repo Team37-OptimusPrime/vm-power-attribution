@@ -87,9 +87,9 @@ def main():
     line_count = 0
 
     try:
-        # lcl-run 실행
+        # lcl-run 실행 (전체 경로 사용)
         proc = subprocess.Popen(
-            ['lcl-run'],
+            ['/usr/local/bin/lcl-run'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
