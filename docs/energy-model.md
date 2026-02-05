@@ -1,8 +1,8 @@
 # VM Energy Attribution Model
 
-> 최종 수정: 2026-02-03
-> 작성자: Team 37 - OptimusPrime
-> 근거: 2026-02-03 Lab Meeting (강 교수님 피드백 반영)
+> 최종 수정: 2026-02-03 <br>
+> 작성자: Woorim Shin <br>
+> 근거: 2026-02-03 Lab Meeting (반효경 교수님 피드백 반영)
 
 ---
 
@@ -69,6 +69,7 @@ E_cpu ∝ CPU_utilization
 **측정**: Intel RAPL (Package domain)
 
 **VM 분리**:
+
 ```
 E_cpu(VM_i) = (cpu_util_i / Σ cpu_util_all) × E_cpu_rapl
 
@@ -93,6 +94,7 @@ where:
 **측정**: nvidia-smi (전체 어댑터 전력)
 
 **VM 분리** (실험 환경):
+
 - 방법 A: GPU 2장 → 각 VM에 물리적으로 분리 할당 (PCI passthrough)
 - 방법 B: 프로세스별 nvidia-smi 활용 (MPS 환경)
 - 논문에서는: "클라우드에서는 vGPU로 분리 가능" 언급 + 실험에서는 방법 A/B 사용
@@ -118,16 +120,19 @@ where:
 ```
 
 따라서:
+
 ```
 E_mem ≈ E_mem_idle ∝ DRAM_size_allocated
 ```
 
 **VM 분리**:
+
 ```
 E_mem(VM_i) = (mem_alloc_i / mem_total) × E_mem_total
 ```
 
 **측정 방법**:
+
 1. 데이터시트 기반: Samsung DDR4 사양서에서 idle power 확인
 2. 간접 측정: 시스템 idle 시 E_wall - E_cpu_rapl - E_gpu_smi ≈ E_mem + E_base
 3. 검증: 아무것도 안 돌리고 측정 → CPU/GPU 에너지 빼기
@@ -146,11 +151,13 @@ where:
 ```
 
 **VM 분리**:
+
 ```
 E_storage(VM_i) = (io_volume_i / Σ io_volume_all) × E_storage_total
 ```
 
 **측정**:
+
 - IO량: cgroup blkio 또는 `/proc/diskstats`로 VM별 측정 가능
 - 단위 에너지: SSD/HDD 데이터시트에서 read/write 당 에너지
 - 간접 측정: IO만 집중적으로 발생시키고 E_wall 변화 관찰

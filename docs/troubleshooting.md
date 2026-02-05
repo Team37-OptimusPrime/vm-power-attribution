@@ -9,6 +9,7 @@
 ### 1.1 RAPL 접근 권한 오류
 
 **증상**:
+
 ```
 Permission denied: /sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj
 ```
@@ -16,6 +17,7 @@ Permission denied: /sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj
 **원인**: 일반 사용자에게 RAPL 읽기 권한 없음
 
 **해결**:
+
 ```bash
 # 방법 1: sudo로 실행
 sudo python3 collect_rapl.py
@@ -33,6 +35,7 @@ sudo udevadm control --reload-rules
 ### 1.2 nvidia-smi 오류
 
 **증상**:
+
 ```
 NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver.
 ```
@@ -40,6 +43,7 @@ NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver.
 **원인**: 드라이버 미설치 또는 커널 업데이트 후 드라이버 불일치
 
 **해결**:
+
 ```bash
 # 드라이버 상태 확인
 lsmod | grep nvidia
@@ -59,6 +63,7 @@ sudo reboot
 ### 1.3 libvirt 연결 실패
 
 **증상**:
+
 ```
 error: failed to connect to the hypervisor
 error: Failed to connect socket to '/var/run/libvirt/libvirt-sock'
@@ -67,6 +72,7 @@ error: Failed to connect socket to '/var/run/libvirt/libvirt-sock'
 **원인**: libvirtd 서비스 미실행 또는 권한 문제
 
 **해결**:
+
 ```bash
 # 서비스 상태 확인
 sudo systemctl status libvirtd
@@ -91,6 +97,7 @@ sudo usermod -aG libvirt,kvm $USER
 **원인**: virbr0 브릿지 미활성화 또는 IP 포워딩 비활성화
 
 **해결**:
+
 ```bash
 # 네트워크 상태 확인
 virsh net-list --all
@@ -114,6 +121,7 @@ echo 1 | sudo tee /proc/sys/net/ipv4/ip_forward
 ### 2.1 시리얼 포트 접근 불가
 
 **증상**:
+
 ```
 [Errno 13] Permission denied: '/dev/ttyAMA0'
 ```
@@ -121,6 +129,7 @@ echo 1 | sudo tee /proc/sys/net/ipv4/ip_forward
 **원인**: 시리얼 포트 권한 부족
 
 **해결**:
+
 ```bash
 # dialout 그룹 추가
 sudo usermod -aG dialout $USER
@@ -138,11 +147,13 @@ ls -la /dev/ttyAMA0  # crw-rw---- 1 root dialout
 **증상**: minicom에서 아무 데이터도 나오지 않음
 
 **원인**:
+
 1. 시리얼 콘솔이 시스템에 의해 사용 중
 2. Baud rate 불일치
 3. RPICT 전원 문제
 
 **해결**:
+
 ```bash
 # 시리얼 콘솔 비활성화 확인
 sudo raspi-config
@@ -162,11 +173,13 @@ minicom -D /dev/ttyAMA0 -b 38400
 **증상**: 전류 값이 항상 0으로 표시
 
 **원인**:
+
 1. CT 센서가 제대로 클램프되지 않음
 2. CT 센서 방향이 반대
 3. 측정 대상에 부하가 없음
 
 **해결**:
+
 1. CT 센서가 전선을 완전히 감싸는지 확인
 2. CT 센서의 화살표 방향 확인 (전류 흐름 방향)
 3. 측정 대상 장비를 켜고 부하 발생시킨 후 테스트
@@ -180,6 +193,7 @@ minicom -D /dev/ttyAMA0 -b 38400
 **원인**: 네트워크 문제 또는 버퍼 오버플로우
 
 **해결**:
+
 ```bash
 # UDP 버퍼 크기 증가 (Host)
 sudo sysctl -w net.core.rmem_max=26214400
@@ -196,6 +210,7 @@ sudo sysctl -w net.core.rmem_default=26214400
 ### 3.1 CUDA out of memory
 
 **증상**:
+
 ```
 RuntimeError: CUDA out of memory
 ```
@@ -203,6 +218,7 @@ RuntimeError: CUDA out of memory
 **원인**: GPU 메모리 부족 또는 이전 프로세스가 메모리 점유
 
 **해결**:
+
 ```bash
 # GPU 프로세스 확인
 nvidia-smi
@@ -220,6 +236,7 @@ sudo kill -9 <PID>
 ### 3.2 PyTorch에서 GPU 인식 안됨
 
 **증상**:
+
 ```python
 >>> torch.cuda.is_available()
 False
@@ -228,6 +245,7 @@ False
 **원인**: CUDA 버전 불일치 또는 드라이버 문제
 
 **해결**:
+
 ```bash
 # CUDA 버전 확인
 nvcc --version
@@ -251,6 +269,7 @@ pip install torch --index-url https://download.pytorch.org/whl/cu121
 **원인**: 시스템 간 시간 동기화 안됨
 
 **해결**:
+
 ```bash
 # NTP 동기화 확인
 timedatectl status
@@ -272,6 +291,7 @@ sudo chronyc makestep
 **원인**: 32비트 카운터 오버플로우 (약 65초마다)
 
 **해결**:
+
 ```python
 # 오버플로우 처리 코드
 MAX_ENERGY = 2**32  # 또는 실제 max 값 확인
@@ -291,6 +311,7 @@ def handle_overflow(current, previous, max_val=MAX_ENERGY):
 **원인**: 장시간 실험으로 디스크 가득 참
 
 **해결**:
+
 ```bash
 # 디스크 사용량 확인
 df -h
@@ -308,6 +329,7 @@ find data/raw -mtime +7 -name "*.csv" -exec gzip {} \;
 ## 5. 공통 체크리스트
 
 ### 실험 시작 전
+
 - [ ] 디스크 여유 공간 > 10GB
 - [ ] 모든 측정 스크립트 테스트 실행
 - [ ] 시간 동기화 확인 (시스템 간 차이 < 1초)
@@ -315,6 +337,7 @@ find data/raw -mtime +7 -name "*.csv" -exec gzip {} \;
 - [ ] tmux/screen 세션에서 실행 (SSH 끊김 대비)
 
 ### 실험 중 문제 발생 시
+
 1. 모든 로그 파일 보존
 2. 오류 메시지 전체 캡처
 3. 시스템 상태 스냅샷 (`top`, `nvidia-smi`, `dmesg`)
@@ -334,4 +357,4 @@ find data/raw -mtime +7 -name "*.csv" -exec gzip {} \;
 
 | 날짜 | 변경 내용 | 작성자 |
 |-----|----------|-------|
-| 2026-02-01 | 최초 작성 | Team 37 |
+| 2026-02-01 | 최초 작성 | Woorim Shin |

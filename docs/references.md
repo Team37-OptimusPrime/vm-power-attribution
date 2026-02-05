@@ -80,7 +80,7 @@
 ### 4.1 측정 장비
 
 - **RPICT (Raspberry Pi Current Transformer)**
-  - https://lechacalshop.com/
+  - <https://lechacalshop.com/>
   - CT 센서 기반 AC 전력 측정
   - Open source 하드웨어
 
@@ -142,10 +142,10 @@
 
 | 패키지 | 용도 | 문서 |
 |-------|------|-----|
-| psutil | 시스템 모니터링 | https://psutil.readthedocs.io/ |
-| pynvml | NVIDIA GPU 관리 | https://pypi.org/project/pynvml/ |
-| libvirt-python | VM 관리 | https://libvirt.org/python.html |
-| pyserial | 시리얼 통신 | https://pythonhosted.org/pyserial/ |
+| psutil | 시스템 모니터링 | <https://psutil.readthedocs.io/> |
+| pynvml | NVIDIA GPU 관리 | <https://pypi.org/project/pynvml/> |
+| libvirt-python | VM 관리 | <https://libvirt.org/python.html> |
+| pyserial | 시리얼 통신 | <https://pythonhosted.org/pyserial/> |
 
 ### 7.2 Linux 도구
 
@@ -160,7 +160,7 @@
 ## 8. 관련 데이터셋
 
 - **Google Cluster Trace**
-  - https://github.com/google/cluster-data
+  - <https://github.com/google/cluster-data>
   - 대규모 클러스터 워크로드 데이터
 
 - **Azure Public Dataset**
@@ -180,4 +180,4 @@
 
 | 날짜 | 변경 내용 | 작성자 |
 |-----|----------|-------|
-| 2026-02-01 | 최초 작성 | Team 37 |
+| 2026-02-01 | 최초 작성 | Woorim Shin |

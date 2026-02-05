@@ -120,7 +120,7 @@ class CPUReader:
     def __init__(self):
         self.prev_stat = None
 
-    def read(self) -> float:
+    def read(self) -> dict:
         try:
             with open('/proc/stat', 'r') as f:
                 line = f.readline()
@@ -128,24 +128,90 @@ class CPUReader:
             values = [int(x) for x in parts]
 
             # user, nice, system, idle, iowait, irq, softirq, steal
-            idle = values[3] + values[4]  # idle + iowait
+            idle = values[3]
+            iowait = values[4]
             total = sum(values)
 
+            result = {'cpu_pct': 0.0, 'iowait_pct': 0.0}
+
             if self.prev_stat is not None:
-                prev_idle, prev_total = self.prev_stat
+                prev_idle, prev_iowait, prev_total = self.prev_stat
                 diff_idle = idle - prev_idle
+                diff_iowait = iowait - prev_iowait
                 diff_total = total - prev_total
                 if diff_total > 0:
-                    cpu_pct = 100.0 * (1.0 - diff_idle / diff_total)
-                else:
-                    cpu_pct = 0.0
-            else:
-                cpu_pct = 0.0
+                    result['cpu_pct'] = 100.0 * (1.0 - (diff_idle + diff_iowait) / diff_total)
+                    result['iowait_pct'] = 100.0 * (diff_iowait / diff_total)
 
-            self.prev_stat = (idle, total)
-            return cpu_pct
+            self.prev_stat = (idle, iowait, total)
+            return result
         except:
-            return 0.0
+            return {'cpu_pct': 0.0, 'iowait_pct': 0.0}
+
+
+class IOReader:
+    """디스크 I/O 읽기 (/proc/diskstats)"""
+
+    def __init__(self):
+        self.prev_stats = None
+        self.prev_time = None
+
+    def read(self) -> dict:
+        try:
+            current_time = time.time()
+            read_bytes = 0
+            write_bytes = 0
+
+            with open('/proc/diskstats', 'r') as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) >= 14:
+                        # 주요 디스크만 (sda, nvme0n1 등)
+                        device = parts[2]
+                        if device.startswith('sd') and device[-1].isalpha() or \
+                           device.startswith('nvme') and 'p' not in device:
+                            # sectors read (field 6), sectors written (field 10)
+                            read_bytes += int(parts[5]) * 512
+                            write_bytes += int(parts[9]) * 512
+
+            result = {'io_read_kbs': 0.0, 'io_write_kbs': 0.0}
+
+            if self.prev_stats is not None and self.prev_time is not None:
+                dt = current_time - self.prev_time
+                if dt > 0:
+                    prev_read, prev_write = self.prev_stats
+                    result['io_read_kbs'] = (read_bytes - prev_read) / 1024 / dt
+                    result['io_write_kbs'] = (write_bytes - prev_write) / 1024 / dt
+
+            self.prev_stats = (read_bytes, write_bytes)
+            self.prev_time = current_time
+            return result
+        except:
+            return {'io_read_kbs': 0.0, 'io_write_kbs': 0.0}
+
+
+class MemReader:
+    """메모리 사용량 읽기"""
+
+    def read(self) -> dict:
+        try:
+            with open('/proc/meminfo', 'r') as f:
+                lines = f.readlines()
+
+            mem = {}
+            for line in lines:
+                parts = line.split()
+                key = parts[0].rstrip(':')
+                value = int(parts[1])  # kB
+                mem[key] = value
+
+            total = mem.get('MemTotal', 1)
+            available = mem.get('MemAvailable', 0)
+            used_pct = 100.0 * (1 - available / total)
+
+            return {'mem_used_pct': used_pct, 'mem_used_gb': (total - available) / 1024 / 1024}
+        except:
+            return {'mem_used_pct': 0.0, 'mem_used_gb': 0.0}
 
 
 def signal_handler(sig, frame):
@@ -173,14 +239,17 @@ def main():
     rapl = RAPLReader()
     nvidia = NvidiaReader()
     cpu = CPUReader()
+    io_reader = IOReader()
+    mem = MemReader()
 
     # 첫 번째 읽기 (델타 계산용)
     rapl.read_power()
     cpu.read()
+    io_reader.read()
     time.sleep(0.1)
 
     # CSV 헤더
-    header = "timestamp,cpu_pct,rapl_package_w,rapl_core_w,rapl_dram_w,gpu_power_w,gpu_temp_c,gpu_util_pct"
+    header = "timestamp,cpu_pct,iowait_pct,rapl_package_w,rapl_core_w,rapl_dram_w,gpu_power_w,gpu_temp_c,gpu_util_pct,io_read_kbs,io_write_kbs,mem_used_pct"
 
     outfile = None
     if not args.no_file:
@@ -208,9 +277,11 @@ def main():
             timestamp = datetime.now().isoformat(timespec='milliseconds')
 
             # 메트릭 수집
-            cpu_pct = cpu.read()
+            cpu_stats = cpu.read()
             rapl_power = rapl.read_power()
             gpu = nvidia.read()
+            io_stats = io_reader.read()
+            mem_stats = mem.read()
 
             # RAPL 값 추출 (없으면 0)
             pkg_w = rapl_power.get('package-0', 0)
@@ -218,9 +289,11 @@ def main():
             dram_w = rapl_power.get('package-0-dram', 0)
 
             csv_line = (
-                f"{timestamp},{cpu_pct:.1f},"
+                f"{timestamp},{cpu_stats['cpu_pct']:.1f},{cpu_stats['iowait_pct']:.1f},"
                 f"{pkg_w:.2f},{core_w:.2f},{dram_w:.2f},"
-                f"{gpu['gpu_power_w']:.2f},{gpu['gpu_temp_c']},{gpu['gpu_util_pct']}"
+                f"{gpu['gpu_power_w']:.2f},{gpu['gpu_temp_c']},{gpu['gpu_util_pct']},"
+                f"{io_stats['io_read_kbs']:.1f},{io_stats['io_write_kbs']:.1f},"
+                f"{mem_stats['mem_used_pct']:.1f}"
             )
 
             print(csv_line)

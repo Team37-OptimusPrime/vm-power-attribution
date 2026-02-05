@@ -49,6 +49,7 @@ Internet
 ## 2. Host Server 설정
 
 ### 2.1 OS 설치
+
 - Ubuntu 22.04 LTS Server
 - 설치 시 OpenSSH 서버 포함
 
@@ -138,6 +139,7 @@ pip install -r requirements.txt
 ```
 
 **requirements.txt**:
+
 ```
 numpy
 pandas
@@ -167,6 +169,7 @@ ssh-keygen -t ed25519
 ## 3. RPICT4V3 설정 (Raspberry Pi)
 
 ### 3.1 Raspberry Pi OS 설치
+
 - Raspberry Pi OS Lite (64-bit) 권장
 - Raspberry Pi Imager로 SD 카드 작성
 - 초기 설정 시 SSH 활성화
@@ -209,6 +212,7 @@ RPICT4V3 HAT
 ```
 
 **주의사항**:
+
 - CT 센서 방향 확인 (화살표가 전류 흐름 방향)
 - AC 어댑터는 측정 대상과 같은 회로에 연결
 - 감전 주의: 전원 끈 상태에서 배선
@@ -354,6 +358,7 @@ sudo phc2sys -s /dev/ptp0 -w
 ## 6. 검증 체크리스트
 
 ### Host Server
+
 - [ ] `virsh list --all` 정상 출력
 - [ ] `nvidia-smi` GPU 인식
 - [ ] `/sys/class/powercap/intel-rapl/` 접근 가능
@@ -361,17 +366,20 @@ sudo phc2sys -s /dev/ptp0 -w
 - [ ] Python venv 활성화 및 패키지 설치
 
 ### Raspberry Pi
+
 - [ ] 고정 IP 192.168.0.200 설정
 - [ ] `/dev/ttyAMA0` 접근 가능
 - [ ] RPICT 시리얼 데이터 수신 확인
 - [ ] Host로 UDP 전송 확인
 
 ### 네트워크
+
 - [ ] Host ↔ Raspberry Pi ping 가능
 - [ ] 외부에서 SSH 접속 가능 (포트 10022)
 - [ ] VM에서 인터넷 접속 가능
 
 ### 시간 동기화
+
 - [ ] Host와 Raspberry Pi 시간 차이 < 10ms
 - [ ] (PTP 사용 시) 시간 차이 < 1ms
 
@@ -381,4 +389,4 @@ sudo phc2sys -s /dev/ptp0 -w
 
 | 날짜 | 변경 내용 | 작성자 |
 |-----|----------|-------|
-| 2026-02-01 | 최초 작성 | Team 37 |
+| 2026-02-01 | 최초 작성 | Woorim Shin |
