@@ -116,15 +116,20 @@ python3 "$SCRIPT_DIR/host_logger.py" -o "$LOG_DIR/nodejs_solo.csv" -d $WORKLOAD_
 LOGGER_PID=$!
 sleep 2
 
-# 부하 생성 (taskset으로 코어 제한)
+# 부하 생성 (taskset으로 코어 제한, curl PID만 대기)
 log "Generating load with curl (cores: $CPU_CORES)..."
 END_TIME=$((SECONDS + WORKLOAD_DURATION - 5))
 while [ $SECONDS -lt $END_TIME ]; do
-    for i in {1..50}; do
-        taskset -c $CPU_CORES curl -s http://localhost:3000/ > /dev/null &
+    CURL_PIDS=""
+    for i in {1..20}; do
+        taskset -c $CPU_CORES curl -s --max-time 2 http://localhost:3000/ > /dev/null &
+        CURL_PIDS="$CURL_PIDS $!"
     done
-    sleep 0.1
-    wait
+    sleep 0.5
+    # curl 프로세스만 대기 (로거, 서버 제외)
+    for pid in $CURL_PIDS; do
+        wait $pid 2>/dev/null || true
+    done
 done
 
 wait $LOGGER_PID 2>/dev/null || true
@@ -161,15 +166,19 @@ source yolo_venv/bin/activate
 ) &
 YOLO_PID=$!
 
-# Node.js 부하 생성 (동시)
+# Node.js 부하 생성 (동시, curl PID만 대기)
 cd "$NODE_DIR"
 END_TIME=$((SECONDS + WORKLOAD_DURATION - 5))
 while [ $SECONDS -lt $END_TIME ]; do
-    for i in {1..50}; do
-        taskset -c $CPU_CORES curl -s http://localhost:3000/ > /dev/null &
+    CURL_PIDS=""
+    for i in {1..20}; do
+        taskset -c $CPU_CORES curl -s --max-time 2 http://localhost:3000/ > /dev/null &
+        CURL_PIDS="$CURL_PIDS $!"
     done
-    sleep 0.1
-    wait
+    sleep 0.5
+    for pid in $CURL_PIDS; do
+        wait $pid 2>/dev/null || true
+    done
 done
 
 wait $YOLO_PID 2>/dev/null || true
