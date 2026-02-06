@@ -48,7 +48,39 @@ sudo chown -R joe:joe ~/vm-power-attribution/data/
 
 ---
 
-### [x] ISSUE-003: Node.js showing high CPU in cgroup but low RAPL
+### [x] ISSUE-003: Script hangs after YOLO Solo phase
+**Date**: 2026-02-06
+**Status**: Closed
+**Severity**: Critical
+
+**Description**:
+Experiment script hangs indefinitely after YOLO Solo phase completes. Does not proceed to Node.js Solo phase.
+
+**Root Cause**:
+1. `wait $YOLO_PID` blocks until YOLO completes, but YOLO loop may not terminate correctly
+2. `sudo systemd-run` may wait for password input (blocking)
+3. Logger processes finish on time but script waits for YOLO first
+
+**Resolution**:
+1. Changed wait order: Wait for loggers first, then kill workloads
+2. Added `sudo -n` (no password prompt) option
+3. Added `timeout` command to force-kill YOLO after duration
+4. Explicit cleanup of YOLO_PID after loggers complete
+
+**Code Change**:
+```bash
+# Before (problematic)
+wait $YOLO_PID
+wait $HOST_LOGGER_PID $CGROUP_LOGGER_PID
+
+# After (fixed)
+wait $HOST_LOGGER_PID $CGROUP_LOGGER_PID  # Logger first
+kill $YOLO_PID  # Then cleanup workload
+```
+
+---
+
+### [x] ISSUE-004: Node.js showing high CPU in cgroup but low RAPL
 **Date**: 2026-02-06
 **Status**: Closed (Expected Behavior)
 **Severity**: Low
@@ -59,11 +91,13 @@ Node.js solo phase shows 17-23% CPU in cgroup but only 7-9W RAPL.
 **Analysis**:
 This is expected behavior. Node.js is I/O bound (curl requests), so CPU utilization is measured but actual power consumption is low. The workload spends most time waiting for I/O rather than computing.
 
+**Update (Phase 1.6)**: Modified server.js to use CPU-intensive operations (PBKDF2, prime calculation) to increase power consumption.
+
 ---
 
 ## Phase 2 Issues (Pending)
 
-### [ ] ISSUE-004: VM power isolation
+### [ ] ISSUE-005: VM power isolation
 **Date**: -
 **Status**: Open
 **Severity**: TBD
@@ -78,7 +112,7 @@ Need to determine how to measure power per VM when VMs share physical hardware.
 
 ---
 
-### [ ] ISSUE-005: Time synchronization for RPICT
+### [ ] ISSUE-006: Time synchronization for RPICT
 **Date**: -
 **Status**: Open
 **Severity**: Medium
@@ -127,4 +161,6 @@ Implement a calculator that converts energy measurements to actual cost in KRW/U
 | 2026-02-06 | ISSUE-001 | Fixed with systemd-run |
 | 2026-02-06 | ISSUE-001 | Verified in test2, closed |
 | 2026-02-06 | ISSUE-002 | Created and closed |
-| 2026-02-06 | ISSUE-003 | Created, marked as expected |
+| 2026-02-06 | ISSUE-003 | Script hang after YOLO - fixed with wait order change |
+| 2026-02-06 | ISSUE-004 | Created, marked as expected behavior |
+| 2026-02-06 | ISSUE-004 | Updated: server.js modified for CPU-intensive load |

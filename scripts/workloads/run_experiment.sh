@@ -12,12 +12,26 @@
 #   3. Node.js, npm install express 완료
 #
 # Usage:
-#   ./run_experiment_v3.sh [experiment_name]
+#   sudo ./run_experiment.sh [experiment_name]
 #
 # 예시:
-#   ./run_experiment_v3.sh phase1.5_test1
+#   sudo ./run_experiment.sh phase1.5_heavy_nodejs
+#
+# 주의: sudo로 실행해야 cgroup 할당이 정상 작동합니다.
 
 set -e
+
+# sudo 권한 확인
+if [ "$EUID" -ne 0 ]; then
+    echo "Error: 이 스크립트는 sudo로 실행해야 합니다."
+    echo "Usage: sudo $0 [experiment_name]"
+    exit 1
+fi
+
+# 실제 사용자 UID/GID (sudo 전 사용자)
+REAL_UID=${SUDO_UID:-$(id -u)}
+REAL_GID=${SUDO_GID:-$(id -g)}
+REAL_USER=${SUDO_USER:-$(whoami)}
 
 # 설정
 EXP_NAME=${1:-"phase1.5_$(date +%Y%m%d_%H%M%S)"}
@@ -119,8 +133,9 @@ phase "Phase 1.5 실험 시작: cgroup 기반 응용별 리소스 분리"
 
 check_prerequisites
 
-# 로그 디렉토리 생성
+# 로그 디렉토리 생성 (실제 사용자 소유로)
 mkdir -p "$LOG_DIR"
+chown -R $REAL_UID:$REAL_GID "$LOG_DIR"
 log "실험명: $EXP_NAME"
 log "로그 디렉토리: $LOG_DIR"
 
@@ -193,8 +208,9 @@ if [ -d "yolo_venv" ]; then
     # systemd-run을 사용하여 모든 자식 프로세스를 cgroup에 포함
     # --scope: 일시적 scope unit 생성
     # --slice=yolo.slice: yolo.slice cgroup에 할당
-    # 이 방식은 yolo가 생성하는 모든 자식 프로세스도 cgroup에 포함시킴
-    sudo systemd-run --scope --slice=yolo.slice --uid=$(id -u) --gid=$(id -g) \
+    # timeout으로 duration 후 강제 종료
+    timeout $((WORKLOAD_DURATION + 5)) \
+        sudo systemd-run --scope --slice=yolo.slice --uid=$REAL_UID --gid=$REAL_GID \
         bash -c "
             source $WORKLOAD_DIR/yolo_venv/bin/activate
             END_TIME=\$((SECONDS + $WORKLOAD_DURATION - 5))
@@ -203,14 +219,18 @@ if [ -d "yolo_venv" ]; then
             done
         " &
     YOLO_PID=$!
-
-    wait $YOLO_PID 2>/dev/null || true
 else
     warn "yolo_venv 없음, YOLO 스킵"
-    sleep $WORKLOAD_DURATION
 fi
 
+# 로거가 duration 후 종료될 때까지 대기 (YOLO보다 로거 우선)
 wait $HOST_LOGGER_PID $CGROUP_LOGGER_PID 2>/dev/null || true
+
+# YOLO가 아직 실행 중이면 종료
+if [ -n "$YOLO_PID" ]; then
+    kill $YOLO_PID 2>/dev/null || true
+    wait $YOLO_PID 2>/dev/null || true
+fi
 
 log "YOLO Solo 완료. Cooldown ${COOLDOWN}s..."
 sleep $COOLDOWN
@@ -296,11 +316,12 @@ CGROUP_LOGGER_PID=$!
 
 sleep 2
 
-# YOLO 시작 (yolo.slice)
+# YOLO 시작 (yolo.slice) - timeout으로 보호
 if [ -d "yolo_venv" ]; then
     log "YOLO 추론 시작 (concurrent, yolo.slice cgroup)..."
 
-    sudo systemd-run --scope --slice=yolo.slice --uid=$(id -u) --gid=$(id -g) \
+    timeout $((WORKLOAD_DURATION + 5)) \
+        sudo systemd-run --scope --slice=yolo.slice --uid=$REAL_UID --gid=$REAL_GID \
         bash -c "
             source $WORKLOAD_DIR/yolo_venv/bin/activate
             END_TIME=\$((SECONDS + $WORKLOAD_DURATION - 5))
@@ -335,12 +356,18 @@ log "고부하 HTTP 요청 시작 (concurrent, nodejs.slice cgroup)..."
 ) &
 CURL_GEN_PID=$!
 
-# 모든 워크로드 완료 대기
-wait $YOLO_PID 2>/dev/null || true
-wait $CURL_GEN_PID 2>/dev/null || true
+# 로거가 duration 후 종료될 때까지 대기 (로거 우선)
 wait $HOST_LOGGER_PID $CGROUP_LOGGER_PID 2>/dev/null || true
 
+# 워크로드 정리
+if [ -n "$YOLO_PID" ]; then
+    kill $YOLO_PID 2>/dev/null || true
+fi
+kill $CURL_GEN_PID 2>/dev/null || true
 kill $NODE_PID 2>/dev/null || true
+
+# 잔여 프로세스 정리
+wait $YOLO_PID $CURL_GEN_PID 2>/dev/null || true
 
 ########################################
 # 완료
