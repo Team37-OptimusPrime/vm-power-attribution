@@ -215,7 +215,7 @@ if [ -d "yolo_venv" ]; then
             source $WORKLOAD_DIR/yolo_venv/bin/activate
             END_TIME=\$((SECONDS + $WORKLOAD_DURATION - 5))
             while [ \$SECONDS -lt \$END_TIME ]; do
-                yolo predict model=yolov8n.pt source=test_video.mp4 device=0 verbose=False 2>/dev/null || true
+                yolo predict model=yolov8m.pt source=test_video.mp4 device=0 verbose=False 2>/dev/null || true
             done
         " &
     YOLO_PID=$!
@@ -326,7 +326,7 @@ if [ -d "yolo_venv" ]; then
             source $WORKLOAD_DIR/yolo_venv/bin/activate
             END_TIME=\$((SECONDS + $WORKLOAD_DURATION - 5))
             while [ \$SECONDS -lt \$END_TIME ]; do
-                yolo predict model=yolov8n.pt source=test_video.mp4 device=0 verbose=False 2>/dev/null || true
+                yolo predict model=yolov8m.pt source=test_video.mp4 device=0 verbose=False 2>/dev/null || true
             done
         " &
     YOLO_PID=$!
