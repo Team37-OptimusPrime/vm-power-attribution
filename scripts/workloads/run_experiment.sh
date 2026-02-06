@@ -239,22 +239,28 @@ CGROUP_LOGGER_PID=$!
 
 sleep 2
 
-# curl 부하 생성 (nodejs cgroup에서)
-log "curl 부하 생성 시작 (nodejs.slice cgroup)..."
+# 고부하 요청 생성 (nodejs cgroup에서)
+log "고부하 HTTP 요청 시작 (nodejs.slice cgroup)..."
 (
     echo $$ > "$NODEJS_CGROUP/cgroup.procs" 2>/dev/null || true
     END_TIME=$((SECONDS + WORKLOAD_DURATION - 5))
-    while [ $SECONDS -lt $END_TIME ]; do
-        CURL_PIDS=""
-        for i in {1..20}; do
-            curl -s --max-time 2 http://localhost:3000/ > /dev/null &
-            CURL_PIDS="$CURL_PIDS $!"
-        done
-        sleep 0.5
-        for pid in $CURL_PIDS; do
-            wait $pid 2>/dev/null || true
-        done
+
+    # 여러 워커 프로세스로 동시 부하 생성
+    for worker in {1..4}; do
+        (
+            while [ $SECONDS -lt $END_TIME ]; do
+                # 다양한 CPU 집약적 엔드포인트 호출
+                for i in {1..10}; do
+                    curl -s --max-time 3 "http://localhost:3000/" > /dev/null &
+                    curl -s --max-time 3 "http://localhost:3000/heavy?n=30000" > /dev/null &
+                    curl -s --max-time 3 "http://localhost:3000/prime?limit=5000" > /dev/null &
+                done
+                wait
+                sleep 0.1
+            done
+        ) &
     done
+    wait
 ) &
 CURL_GEN_PID=$!
 
@@ -305,21 +311,27 @@ if [ -d "yolo_venv" ]; then
     YOLO_PID=$!
 fi
 
-# curl 부하 (nodejs.slice)
+# 고부하 요청 (nodejs.slice)
+log "고부하 HTTP 요청 시작 (concurrent, nodejs.slice cgroup)..."
 (
     echo $$ > "$NODEJS_CGROUP/cgroup.procs" 2>/dev/null || true
     END_TIME=$((SECONDS + WORKLOAD_DURATION - 5))
-    while [ $SECONDS -lt $END_TIME ]; do
-        CURL_PIDS=""
-        for i in {1..20}; do
-            curl -s --max-time 2 http://localhost:3000/ > /dev/null &
-            CURL_PIDS="$CURL_PIDS $!"
-        done
-        sleep 0.5
-        for pid in $CURL_PIDS; do
-            wait $pid 2>/dev/null || true
-        done
+
+    # 여러 워커 프로세스로 동시 부하 생성
+    for worker in {1..4}; do
+        (
+            while [ $SECONDS -lt $END_TIME ]; do
+                for i in {1..10}; do
+                    curl -s --max-time 3 "http://localhost:3000/" > /dev/null &
+                    curl -s --max-time 3 "http://localhost:3000/heavy?n=30000" > /dev/null &
+                    curl -s --max-time 3 "http://localhost:3000/prime?limit=5000" > /dev/null &
+                done
+                wait
+                sleep 0.1
+            done
+        ) &
     done
+    wait
 ) &
 CURL_GEN_PID=$!
 
