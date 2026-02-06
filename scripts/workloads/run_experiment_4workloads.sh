@@ -1,11 +1,17 @@
 #!/bin/bash
-# Phase 1.6 실험: 4개 워크로드 비교
+# Phase 1.6 실험: 4개 워크로드 + 4개 조합 비교
 #
-# 워크로드:
+# Solo 워크로드:
 #   A1: YOLO Nano (yolov8n.pt) - 경량 AI
 #   A2: YOLO Medium (yolov8m.pt) - 보편 AI
 #   B1: Node.js Light - 경량 Non-AI
 #   B2: Node.js Heavy - 고부하 Non-AI
+#
+# Concurrent 조합:
+#   A1+B1: YOLO Nano + Node.js Light
+#   A1+B2: YOLO Nano + Node.js Heavy
+#   A2+B1: YOLO Medium + Node.js Light
+#   A2+B2: YOLO Medium + Node.js Heavy
 #
 # Usage:
 #   sudo -E ./run_experiment_4workloads.sh [experiment_name]
@@ -211,13 +217,19 @@ log "로그 디렉토리: $LOG_DIR"
 cat > "$LOG_DIR/config.txt" << EOF
 Experiment: $EXP_NAME
 Date: $(date)
-Type: Phase 1.6 - 4 Workloads Comparison
+Type: Phase 1.6 - 4 Workloads + 4 Concurrent Combinations
 
-Workloads:
+Solo Workloads:
 - A1: YOLO Nano (yolov8n.pt) - yolo.slice
 - A2: YOLO Medium (yolov8m.pt) - yolo.slice
 - B1: Node.js Light (server_light.js) - nodejs.slice
 - B2: Node.js Heavy (server_heavy.js) - nodejs.slice
+
+Concurrent Combinations:
+- A1+B1: YOLO Nano + Node.js Light
+- A1+B2: YOLO Nano + Node.js Heavy
+- A2+B1: YOLO Medium + Node.js Light
+- A2+B2: YOLO Medium + Node.js Heavy
 
 cgroup Configuration:
 - YOLO slice: cpuset.cpus=$(cat $YOLO_CGROUP/cpuset.cpus 2>/dev/null || echo "N/A")
@@ -225,8 +237,9 @@ cgroup Configuration:
 
 Timing:
 - Baseline: ${BASELINE_DURATION}s
-- Each Workload: ${WORKLOAD_DURATION}s
+- Each Phase: ${WORKLOAD_DURATION}s
 - Cooldown: ${COOLDOWN}s
+- Total Phases: 9 (1 baseline + 4 solo + 4 concurrent)
 EOF
 
 ########################################
@@ -326,7 +339,103 @@ start_nodejs_heavy $WORKLOAD_DURATION
 wait $HOST_PID $CGROUP_PID 2>/dev/null
 stop_workloads
 
-log "B2 완료."
+log "B2 완료. Cooldown ${COOLDOWN}s..."
+sleep $COOLDOWN
+
+########################################
+# Phase 5: A1+B1 - YOLO Nano + Node.js Light
+########################################
+phase "Phase 5: A1+B1 - YOLO Nano + Node.js Light - ${WORKLOAD_DURATION}s"
+info "YOLO: yolov8n.pt (yolo.slice) + Node.js: server_light.js (nodejs.slice)"
+
+start_nodejs_server "server_light.js"
+
+python3 "$SCRIPT_DIR/host_logger.py" -o "$LOG_DIR/A1B1_concurrent_host.csv" -d $WORKLOAD_DURATION -i 1 &
+HOST_PID=$!
+python3 "$SCRIPT_DIR/cgroup_logger.py" -o "$LOG_DIR/A1B1_concurrent_cgroup.csv" -d $WORKLOAD_DURATION -i 1 &
+CGROUP_PID=$!
+
+sleep 2
+cd "$WORKLOAD_DIR"
+start_yolo "yolov8n.pt" $WORKLOAD_DURATION
+start_nodejs_light $WORKLOAD_DURATION
+
+wait $HOST_PID $CGROUP_PID 2>/dev/null
+stop_workloads
+
+log "A1+B1 완료. Cooldown ${COOLDOWN}s..."
+sleep $COOLDOWN
+
+########################################
+# Phase 6: A1+B2 - YOLO Nano + Node.js Heavy
+########################################
+phase "Phase 6: A1+B2 - YOLO Nano + Node.js Heavy - ${WORKLOAD_DURATION}s"
+info "YOLO: yolov8n.pt (yolo.slice) + Node.js: server_heavy.js (nodejs.slice)"
+
+start_nodejs_server "server_heavy.js"
+
+python3 "$SCRIPT_DIR/host_logger.py" -o "$LOG_DIR/A1B2_concurrent_host.csv" -d $WORKLOAD_DURATION -i 1 &
+HOST_PID=$!
+python3 "$SCRIPT_DIR/cgroup_logger.py" -o "$LOG_DIR/A1B2_concurrent_cgroup.csv" -d $WORKLOAD_DURATION -i 1 &
+CGROUP_PID=$!
+
+sleep 2
+cd "$WORKLOAD_DIR"
+start_yolo "yolov8n.pt" $WORKLOAD_DURATION
+start_nodejs_heavy $WORKLOAD_DURATION
+
+wait $HOST_PID $CGROUP_PID 2>/dev/null
+stop_workloads
+
+log "A1+B2 완료. Cooldown ${COOLDOWN}s..."
+sleep $COOLDOWN
+
+########################################
+# Phase 7: A2+B1 - YOLO Medium + Node.js Light
+########################################
+phase "Phase 7: A2+B1 - YOLO Medium + Node.js Light - ${WORKLOAD_DURATION}s"
+info "YOLO: yolov8m.pt (yolo.slice) + Node.js: server_light.js (nodejs.slice)"
+
+start_nodejs_server "server_light.js"
+
+python3 "$SCRIPT_DIR/host_logger.py" -o "$LOG_DIR/A2B1_concurrent_host.csv" -d $WORKLOAD_DURATION -i 1 &
+HOST_PID=$!
+python3 "$SCRIPT_DIR/cgroup_logger.py" -o "$LOG_DIR/A2B1_concurrent_cgroup.csv" -d $WORKLOAD_DURATION -i 1 &
+CGROUP_PID=$!
+
+sleep 2
+cd "$WORKLOAD_DIR"
+start_yolo "yolov8m.pt" $WORKLOAD_DURATION
+start_nodejs_light $WORKLOAD_DURATION
+
+wait $HOST_PID $CGROUP_PID 2>/dev/null
+stop_workloads
+
+log "A2+B1 완료. Cooldown ${COOLDOWN}s..."
+sleep $COOLDOWN
+
+########################################
+# Phase 8: A2+B2 - YOLO Medium + Node.js Heavy
+########################################
+phase "Phase 8: A2+B2 - YOLO Medium + Node.js Heavy - ${WORKLOAD_DURATION}s"
+info "YOLO: yolov8m.pt (yolo.slice) + Node.js: server_heavy.js (nodejs.slice)"
+
+start_nodejs_server "server_heavy.js"
+
+python3 "$SCRIPT_DIR/host_logger.py" -o "$LOG_DIR/A2B2_concurrent_host.csv" -d $WORKLOAD_DURATION -i 1 &
+HOST_PID=$!
+python3 "$SCRIPT_DIR/cgroup_logger.py" -o "$LOG_DIR/A2B2_concurrent_cgroup.csv" -d $WORKLOAD_DURATION -i 1 &
+CGROUP_PID=$!
+
+sleep 2
+cd "$WORKLOAD_DIR"
+start_yolo "yolov8m.pt" $WORKLOAD_DURATION
+start_nodejs_heavy $WORKLOAD_DURATION
+
+wait $HOST_PID $CGROUP_PID 2>/dev/null
+stop_workloads
+
+log "A2+B2 완료."
 
 ########################################
 # 완료
@@ -338,22 +447,21 @@ ls -la "$LOG_DIR"
 
 echo ""
 info "생성된 파일:"
-echo "  Baseline:"
-echo "    - baseline_host.csv, baseline_cgroup.csv"
+echo "  [Solo Runs]"
+echo "  Baseline: baseline_host.csv, baseline_cgroup.csv"
+echo "  A1 (YOLO Nano): A1_yolo_nano_host.csv, A1_yolo_nano_cgroup.csv"
+echo "  A2 (YOLO Medium): A2_yolo_medium_host.csv, A2_yolo_medium_cgroup.csv"
+echo "  B1 (Node.js Light): B1_nodejs_light_host.csv, B1_nodejs_light_cgroup.csv"
+echo "  B2 (Node.js Heavy): B2_nodejs_heavy_host.csv, B2_nodejs_heavy_cgroup.csv"
 echo ""
-echo "  A1 (YOLO Nano):"
-echo "    - A1_yolo_nano_host.csv, A1_yolo_nano_cgroup.csv"
-echo ""
-echo "  A2 (YOLO Medium):"
-echo "    - A2_yolo_medium_host.csv, A2_yolo_medium_cgroup.csv"
-echo ""
-echo "  B1 (Node.js Light):"
-echo "    - B1_nodejs_light_host.csv, B1_nodejs_light_cgroup.csv"
-echo ""
-echo "  B2 (Node.js Heavy):"
-echo "    - B2_nodejs_heavy_host.csv, B2_nodejs_heavy_cgroup.csv"
+echo "  [Concurrent Runs]"
+echo "  A1+B1: A1B1_concurrent_host.csv, A1B1_concurrent_cgroup.csv"
+echo "  A1+B2: A1B2_concurrent_host.csv, A1B2_concurrent_cgroup.csv"
+echo "  A2+B1: A2B1_concurrent_host.csv, A2B1_concurrent_cgroup.csv"
+echo "  A2+B2: A2B2_concurrent_host.csv, A2B2_concurrent_cgroup.csv"
 
 echo ""
+log "총 실험 시간: $((BASELINE_DURATION + WORKLOAD_DURATION*8 + COOLDOWN*8))초 (~$((( BASELINE_DURATION + WORKLOAD_DURATION*8 + COOLDOWN*8 ) / 60))분)"
 log "다음 단계:"
 echo "  1. RPICT 데이터 수집 (별도 Raspberry Pi)"
 echo "  2. 분석 스크립트 실행"
