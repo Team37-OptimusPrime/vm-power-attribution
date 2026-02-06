@@ -10,7 +10,8 @@
 # Usage:
 #   sudo -E ./run_experiment_4workloads.sh [experiment_name]
 
-set -e
+# set -e 제거 - 개별 명령 실패해도 계속 진행
+set +e
 
 # sudo 권한 확인
 if [ "$EUID" -ne 0 ]; then
@@ -91,11 +92,17 @@ cleanup() {
 
 trap cleanup EXIT
 
-# YOLO 실행 함수
-run_yolo() {
+# 전역 PID 변수
+YOLO_PID=""
+CURL_PID=""
+NODE_PID=""
+
+# YOLO 실행 함수 (PID를 전역 변수에 저장)
+start_yolo() {
     local model=$1  # yolov8n.pt or yolov8m.pt
     local duration=$2
 
+    YOLO_PID=""
     if [ -d "$WORKLOAD_DIR/yolo_venv" ]; then
         timeout $((duration + 10)) \
             sudo systemd-run --scope --slice=yolo.slice --uid=$REAL_UID --gid=$REAL_GID \
@@ -106,12 +113,15 @@ run_yolo() {
                     yolo predict model=$model source=test_video.mp4 device=0 verbose=False 2>/dev/null || true
                 done
             " &
-        echo $!
+        YOLO_PID=$!
+        log "YOLO 시작 (PID: $YOLO_PID, model: $model)"
+    else
+        warn "yolo_venv 없음, YOLO 스킵"
     fi
 }
 
 # Node.js Light 부하 생성
-run_nodejs_light() {
+start_nodejs_light() {
     local duration=$1
 
     (
@@ -119,17 +129,18 @@ run_nodejs_light() {
         END_TIME=$((SECONDS + duration - 5))
         while [ $SECONDS -lt $END_TIME ]; do
             for i in {1..20}; do
-                curl -s --max-time 2 "http://localhost:3000/" > /dev/null &
+                curl -s --max-time 2 "http://localhost:3000/" > /dev/null 2>&1 &
             done
             wait
             sleep 0.5
         done
     ) &
-    echo $!
+    CURL_PID=$!
+    log "Light 부하 시작 (PID: $CURL_PID)"
 }
 
 # Node.js Heavy 부하 생성
-run_nodejs_heavy() {
+start_nodejs_heavy() {
     local duration=$1
 
     (
@@ -140,9 +151,9 @@ run_nodejs_heavy() {
             (
                 while [ $SECONDS -lt $END_TIME ]; do
                     for i in {1..10}; do
-                        curl -s --max-time 3 "http://localhost:3000/" > /dev/null &
-                        curl -s --max-time 3 "http://localhost:3000/heavy?n=30000" > /dev/null &
-                        curl -s --max-time 3 "http://localhost:3000/prime?limit=5000" > /dev/null &
+                        curl -s --max-time 3 "http://localhost:3000/" > /dev/null 2>&1 &
+                        curl -s --max-time 3 "http://localhost:3000/heavy?n=30000" > /dev/null 2>&1 &
+                        curl -s --max-time 3 "http://localhost:3000/prime?limit=5000" > /dev/null 2>&1 &
                     done
                     wait
                     sleep 0.1
@@ -151,7 +162,33 @@ run_nodejs_heavy() {
         done
         wait
     ) &
-    echo $!
+    CURL_PID=$!
+    log "Heavy 부하 시작 (PID: $CURL_PID)"
+}
+
+# Node.js 서버 시작
+start_nodejs_server() {
+    local server_file=$1
+
+    cd "$WORKLOAD_DIR"
+    (
+        echo $$ > "$NODEJS_CGROUP/cgroup.procs" 2>/dev/null || true
+        exec node "$server_file" 2>/dev/null
+    ) &
+    NODE_PID=$!
+    sleep 2
+    log "Node.js 서버 시작 (PID: $NODE_PID, file: $server_file)"
+}
+
+# 워크로드 정리
+stop_workloads() {
+    [ -n "$YOLO_PID" ] && kill $YOLO_PID 2>/dev/null
+    [ -n "$CURL_PID" ] && kill $CURL_PID 2>/dev/null
+    [ -n "$NODE_PID" ] && kill $NODE_PID 2>/dev/null
+    pkill -f "node.*server" 2>/dev/null || true
+    YOLO_PID=""
+    CURL_PID=""
+    NODE_PID=""
 }
 
 ########################################
@@ -219,10 +256,10 @@ CGROUP_PID=$!
 
 sleep 2
 cd "$WORKLOAD_DIR"
-YOLO_PID=$(run_yolo "yolov8n.pt" $WORKLOAD_DURATION)
+start_yolo "yolov8n.pt" $WORKLOAD_DURATION
 
-wait $HOST_PID $CGROUP_PID 2>/dev/null || true
-[ -n "$YOLO_PID" ] && kill $YOLO_PID 2>/dev/null || true
+wait $HOST_PID $CGROUP_PID 2>/dev/null
+stop_workloads
 
 log "A1 완료. Cooldown ${COOLDOWN}s..."
 sleep $COOLDOWN
@@ -240,10 +277,10 @@ CGROUP_PID=$!
 
 sleep 2
 cd "$WORKLOAD_DIR"
-YOLO_PID=$(run_yolo "yolov8m.pt" $WORKLOAD_DURATION)
+start_yolo "yolov8m.pt" $WORKLOAD_DURATION
 
-wait $HOST_PID $CGROUP_PID 2>/dev/null || true
-[ -n "$YOLO_PID" ] && kill $YOLO_PID 2>/dev/null || true
+wait $HOST_PID $CGROUP_PID 2>/dev/null
+stop_workloads
 
 log "A2 완료. Cooldown ${COOLDOWN}s..."
 sleep $COOLDOWN
@@ -254,14 +291,7 @@ sleep $COOLDOWN
 phase "Phase 3: B1 - Node.js Light Solo - ${WORKLOAD_DURATION}s"
 info "Server: server_light.js | cgroup: nodejs.slice"
 
-# Node.js Light 서버 시작
-cd "$WORKLOAD_DIR"
-(
-    echo $$ > "$NODEJS_CGROUP/cgroup.procs" 2>/dev/null || true
-    exec node server_light.js
-) &
-NODE_PID=$!
-sleep 2
+start_nodejs_server "server_light.js"
 
 python3 "$SCRIPT_DIR/host_logger.py" -o "$LOG_DIR/B1_nodejs_light_host.csv" -d $WORKLOAD_DURATION -i 1 &
 HOST_PID=$!
@@ -269,10 +299,10 @@ python3 "$SCRIPT_DIR/cgroup_logger.py" -o "$LOG_DIR/B1_nodejs_light_cgroup.csv" 
 CGROUP_PID=$!
 
 sleep 2
-CURL_PID=$(run_nodejs_light $WORKLOAD_DURATION)
+start_nodejs_light $WORKLOAD_DURATION
 
-wait $HOST_PID $CGROUP_PID 2>/dev/null || true
-kill $CURL_PID $NODE_PID 2>/dev/null || true
+wait $HOST_PID $CGROUP_PID 2>/dev/null
+stop_workloads
 
 log "B1 완료. Cooldown ${COOLDOWN}s..."
 sleep $COOLDOWN
@@ -283,14 +313,7 @@ sleep $COOLDOWN
 phase "Phase 4: B2 - Node.js Heavy Solo - ${WORKLOAD_DURATION}s"
 info "Server: server_heavy.js | cgroup: nodejs.slice"
 
-# Node.js Heavy 서버 시작
-cd "$WORKLOAD_DIR"
-(
-    echo $$ > "$NODEJS_CGROUP/cgroup.procs" 2>/dev/null || true
-    exec node server_heavy.js
-) &
-NODE_PID=$!
-sleep 2
+start_nodejs_server "server_heavy.js"
 
 python3 "$SCRIPT_DIR/host_logger.py" -o "$LOG_DIR/B2_nodejs_heavy_host.csv" -d $WORKLOAD_DURATION -i 1 &
 HOST_PID=$!
@@ -298,10 +321,10 @@ python3 "$SCRIPT_DIR/cgroup_logger.py" -o "$LOG_DIR/B2_nodejs_heavy_cgroup.csv" 
 CGROUP_PID=$!
 
 sleep 2
-CURL_PID=$(run_nodejs_heavy $WORKLOAD_DURATION)
+start_nodejs_heavy $WORKLOAD_DURATION
 
-wait $HOST_PID $CGROUP_PID 2>/dev/null || true
-kill $CURL_PID $NODE_PID 2>/dev/null || true
+wait $HOST_PID $CGROUP_PID 2>/dev/null
+stop_workloads
 
 log "B2 완료."
 
