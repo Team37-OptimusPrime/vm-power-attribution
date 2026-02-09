@@ -98,6 +98,25 @@ create_cgroup() {
     if [ -f "$path/io.weight" ]; then
         echo "100" > "$path/io.weight" 2>/dev/null || true
     fi
+
+    # IO accounting 활성화 (io.stat 집계용)
+    # NVMe 블록 디바이스에 대해 io.cost 또는 io.max 설정
+    local nvme_majmin
+    nvme_majmin=$(lsblk -dn -o MAJ:MIN /dev/nvme0n1 2>/dev/null | tr -d ' ')
+    if [ -n "$nvme_majmin" ]; then
+        # io.max 설정 (제한 없이, accounting만 활성화)
+        if [ -f "$path/io.max" ]; then
+            echo "$nvme_majmin rbps=max wbps=max riops=max wiops=max" > "$path/io.max" 2>/dev/null || true
+            log "  io.max = $nvme_majmin (accounting enabled, no limit)"
+        fi
+        # io.latency 설정 (대안: io.stat 활성화 트리거)
+        if [ -f "$path/io.latency" ]; then
+            echo "$nvme_majmin target=0" > "$path/io.latency" 2>/dev/null || true
+            log "  io.latency = $nvme_majmin target=0"
+        fi
+    else
+        warn "NVMe 디바이스를 찾을 수 없습니다. IO accounting 설정 건너뜀"
+    fi
 }
 
 setup() {
@@ -166,6 +185,8 @@ show_status() {
         [ -f "$path/cpu.max" ] && echo "  cpu.max: $(cat $path/cpu.max)"
         [ -f "$path/memory.max" ] && echo "  memory.max: $(cat $path/memory.max) bytes"
         [ -f "$path/memory.current" ] && echo "  memory.current: $(cat $path/memory.current) bytes"
+        [ -f "$path/io.max" ] && echo "  io.max: $(cat $path/io.max)"
+        [ -f "$path/io.stat" ] && echo "  io.stat: $(cat $path/io.stat)"
         [ -f "$path/cgroup.procs" ] && echo "  프로세스: $(cat $path/cgroup.procs | wc -l)개"
     done
 }

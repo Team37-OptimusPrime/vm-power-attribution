@@ -190,6 +190,34 @@ class IOReader:
             return {'io_read_kbs': 0.0, 'io_write_kbs': 0.0}
 
 
+class CPUFreqReader:
+    """Per-core CPU Frequency 읽기"""
+
+    CPUFREQ_BASE = "/sys/devices/system/cpu"
+
+    def __init__(self):
+        self.num_cores = self._detect_cores()
+
+    def _detect_cores(self) -> int:
+        """온라인 코어 수 탐지"""
+        count = 0
+        while Path(f"{self.CPUFREQ_BASE}/cpu{count}/cpufreq/scaling_cur_freq").exists():
+            count += 1
+        return count if count > 0 else 8  # fallback
+
+    def read(self) -> dict:
+        """각 코어의 현재 frequency (MHz) 읽기"""
+        freqs = {}
+        for i in range(self.num_cores):
+            path = Path(f"{self.CPUFREQ_BASE}/cpu{i}/cpufreq/scaling_cur_freq")
+            try:
+                freq_khz = int(path.read_text().strip())
+                freqs[f'cpu{i}_mhz'] = freq_khz / 1000
+            except (FileNotFoundError, PermissionError, ValueError):
+                freqs[f'cpu{i}_mhz'] = 0.0
+        return freqs
+
+
 class MemReader:
     """메모리 사용량 읽기"""
 
@@ -241,6 +269,7 @@ def main():
     cpu = CPUReader()
     io_reader = IOReader()
     mem = MemReader()
+    cpufreq = CPUFreqReader()
 
     # 첫 번째 읽기 (델타 계산용)
     rapl.read_power()
@@ -249,7 +278,8 @@ def main():
     time.sleep(0.1)
 
     # CSV 헤더
-    header = "timestamp,cpu_pct,iowait_pct,rapl_package_w,rapl_core_w,rapl_dram_w,gpu_power_w,gpu_temp_c,gpu_util_pct,io_read_kbs,io_write_kbs,mem_used_pct"
+    freq_cols = ','.join([f'cpu{i}_mhz' for i in range(cpufreq.num_cores)])
+    header = f"timestamp,cpu_pct,iowait_pct,rapl_package_w,rapl_core_w,rapl_dram_w,gpu_power_w,gpu_temp_c,gpu_util_pct,io_read_kbs,io_write_kbs,mem_used_pct,{freq_cols}"
 
     outfile = None
     if not args.no_file:
@@ -282,18 +312,22 @@ def main():
             gpu = nvidia.read()
             io_stats = io_reader.read()
             mem_stats = mem.read()
+            freq_stats = cpufreq.read()
 
             # RAPL 값 추출 (없으면 0)
             pkg_w = rapl_power.get('package-0', 0)
             core_w = rapl_power.get('package-0-core', 0)
             dram_w = rapl_power.get('package-0-dram', 0)
 
+            # CPU frequency 값
+            freq_values = ','.join([f"{freq_stats.get(f'cpu{i}_mhz', 0):.0f}" for i in range(cpufreq.num_cores)])
+
             csv_line = (
                 f"{timestamp},{cpu_stats['cpu_pct']:.1f},{cpu_stats['iowait_pct']:.1f},"
                 f"{pkg_w:.2f},{core_w:.2f},{dram_w:.2f},"
                 f"{gpu['gpu_power_w']:.2f},{gpu['gpu_temp_c']},{gpu['gpu_util_pct']},"
                 f"{io_stats['io_read_kbs']:.1f},{io_stats['io_write_kbs']:.1f},"
-                f"{mem_stats['mem_used_pct']:.1f}"
+                f"{mem_stats['mem_used_pct']:.1f},{freq_values}"
             )
 
             print(csv_line)

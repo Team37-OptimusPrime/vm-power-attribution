@@ -31,6 +31,7 @@ class CgroupReader:
         self.prev_time = None
         self.prev_io_read = None
         self.prev_io_write = None
+        self.prev_io_time = None
 
     def exists(self) -> bool:
         return self.path.exists()
@@ -109,7 +110,7 @@ class CgroupReader:
         return result
 
     def read_io_stat(self) -> Dict:
-        """io.stat 읽기 - 디스크 IO"""
+        """io.stat 읽기 - 디스크 IO (io.stat 우선, 실패 시 /proc/PID/io 폴백)"""
         result = {
             'io_read_bytes': 0,
             'io_write_bytes': 0,
@@ -117,44 +118,84 @@ class CgroupReader:
             'io_write_kbs': 0.0,
         }
 
+        total_read = 0
+        total_write = 0
+        got_data = False
+
+        # 방법 1: cgroup io.stat (우선)
         stat_file = self.path / "io.stat"
-        if not stat_file.exists():
-            return result
+        if stat_file.exists():
+            try:
+                content = stat_file.read_text()
+                for line in content.strip().split('\n'):
+                    if not line:
+                        continue
+                    # 형식: major:minor rbytes=X wbytes=Y rios=Z wios=W
+                    parts = line.split()
+                    for part in parts:
+                        if part.startswith('rbytes='):
+                            total_read += int(part.split('=')[1])
+                            got_data = True
+                        elif part.startswith('wbytes='):
+                            total_write += int(part.split('=')[1])
+                            got_data = True
+            except Exception:
+                pass
 
-        try:
-            content = stat_file.read_text()
-            total_read = 0
-            total_write = 0
+        # 방법 2: /proc/PID/io 폴백 (io.stat이 비어있거나 0일 때)
+        if not got_data or (total_read == 0 and total_write == 0):
+            proc_read, proc_write = self._read_proc_io()
+            if proc_read > 0 or proc_write > 0:
+                total_read = proc_read
+                total_write = proc_write
 
-            for line in content.strip().split('\n'):
-                if not line:
-                    continue
-                # 형식: major:minor rbytes=X wbytes=Y rios=Z wios=W
-                parts = line.split()
-                for part in parts:
-                    if part.startswith('rbytes='):
-                        total_read += int(part.split('=')[1])
-                    elif part.startswith('wbytes='):
-                        total_write += int(part.split('=')[1])
+        result['io_read_bytes'] = total_read
+        result['io_write_bytes'] = total_write
 
-            result['io_read_bytes'] = total_read
-            result['io_write_bytes'] = total_write
+        # IO 속도 계산 (델타 기반)
+        current_time = time.time()
+        if self.prev_io_read is not None and self.prev_io_write is not None:
+            dt = current_time - (self.prev_io_time or current_time)
+            if dt > 0:
+                result['io_read_kbs'] = (total_read - self.prev_io_read) / 1024 / dt
+                result['io_write_kbs'] = (total_write - self.prev_io_write) / 1024 / dt
 
-            # IO 속도 계산 (델타 기반)
-            current_time = time.time()
-            if self.prev_io_read is not None and self.prev_io_write is not None:
-                dt = current_time - (self.prev_time or current_time)
-                if dt > 0:
-                    result['io_read_kbs'] = (total_read - self.prev_io_read) / 1024 / dt
-                    result['io_write_kbs'] = (total_write - self.prev_io_write) / 1024 / dt
-
-            self.prev_io_read = total_read
-            self.prev_io_write = total_write
-
-        except Exception as e:
-            pass
+        self.prev_io_read = total_read
+        self.prev_io_write = total_write
+        self.prev_io_time = current_time
 
         return result
+
+    def _read_proc_io(self) -> tuple:
+        """cgroup 내 프로세스들의 /proc/PID/io 합산 (폴백)"""
+        total_read = 0
+        total_write = 0
+
+        procs_file = self.path / "cgroup.procs"
+        if not procs_file.exists():
+            return (0, 0)
+
+        try:
+            pids = procs_file.read_text().strip().split('\n')
+            for pid in pids:
+                if not pid:
+                    continue
+                io_file = Path(f"/proc/{pid}/io")
+                if not io_file.exists():
+                    continue
+                try:
+                    content = io_file.read_text()
+                    for line in content.split('\n'):
+                        if line.startswith('read_bytes:'):
+                            total_read += int(line.split(':')[1].strip())
+                        elif line.startswith('write_bytes:'):
+                            total_write += int(line.split(':')[1].strip())
+                except (PermissionError, ProcessLookupError, FileNotFoundError):
+                    continue
+        except Exception:
+            pass
+
+        return (total_read, total_write)
 
     def read_procs(self) -> int:
         """cgroup 내 프로세스 수"""
