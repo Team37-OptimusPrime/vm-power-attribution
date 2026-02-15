@@ -249,17 +249,17 @@ log "Idle baseline 완료. Cooldown ${COOLDOWN}s..."
 sleep $COOLDOWN
 
 ########################################
-# Pre-create: fio 테스트 파일 생성
+# Pre-create: fio 테스트 파일 생성 (실제 데이터 쓰기)
 ########################################
 phase "테스트 파일 준비"
 
 if [ ! -f "$FIO_FILE" ]; then
-    log "fio 테스트 파일 생성 중... ($FIO_SIZE)"
+    log "fio 테스트 파일 생성 중... ($FIO_SIZE) - 실제 데이터 쓰기"
     fio --name=precreate --filename="$FIO_FILE" \
         --size="$FIO_SIZE" --rw=write --bs=1M \
         --ioengine=libaio --direct=1 --iodepth=32 \
-        --create_only=1 2>/dev/null
-    log "테스트 파일 생성 완료"
+        --numjobs=1 2>/dev/null
+    log "테스트 파일 생성 완료 (실제 데이터 기록됨)"
     sleep 10  # 쓰기 캐시 플러시 대기
     sync
     log "sync 완료"
@@ -268,14 +268,21 @@ else
 fi
 
 ########################################
-# Phase 1: Sequential Read
-########################################
-run_fio_phase "seq_read" "read" "1M" "32"
-
-########################################
-# Phase 2: Sequential Write
+# Phase 1: Sequential Write (먼저 실행)
 ########################################
 run_fio_phase "seq_write" "write" "1M" "32"
+
+########################################
+# Phase 2: Sequential Read (write 후 실행 → 실제 SSD 데이터 읽기)
+# Page cache drop하여 SSD에서 직접 읽도록 보장
+########################################
+phase "Page cache 플러시 (seq_read 준비)"
+sync
+echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+log "Page cache dropped. 10초 안정화 대기..."
+sleep 10
+
+run_fio_phase "seq_read" "read" "1M" "32"
 
 ########################################
 # 완료
