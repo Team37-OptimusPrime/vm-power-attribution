@@ -140,6 +140,60 @@ verify_hardware() {
 }
 
 ########################################
+# CPU 주파수 고정 (DVFS 제어)
+########################################
+lock_cpu_frequency() {
+    phase "CPU 주파수 고정 (idle 실험 일관성 보장)"
+
+    # 현재 governor 확인
+    local current_gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null)
+    log "현재 CPU governor: $current_gov"
+
+    # powersave governor 설정 (최저 주파수 고정)
+    local changed=0
+    for gov_file in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+        if [ -f "$gov_file" ]; then
+            echo "powersave" > "$gov_file" 2>/dev/null && changed=$((changed+1))
+        fi
+    done
+    log "CPU governor -> powersave: ${changed}개 코어 설정"
+
+    # Turbo Boost 비활성화
+    if [ -f /sys/devices/system/cpu/intel_pstate/no_turbo ]; then
+        echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null
+        log "Intel Turbo Boost: 비활성화"
+    fi
+
+    # 확인: 실제 주파수 읽기
+    sleep 1
+    local freq_khz=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null)
+    local freq_mhz=$((freq_khz / 1000))
+    log "현재 CPU0 주파수: ${freq_mhz}MHz"
+
+    local min_freq=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq 2>/dev/null)
+    local min_mhz=$((min_freq / 1000))
+    log "최소 주파수: ${min_mhz}MHz"
+
+    if [ "$freq_khz" -le $((min_freq + 200000)) ]; then
+        log "CPU 주파수 고정 확인: 최저 근처에서 안정"
+    else
+        warn "CPU 주파수가 예상보다 높음 (${freq_mhz}MHz). 측정에 영향 가능"
+    fi
+}
+
+restore_cpu_frequency() {
+    # 실험 후 원래 설정 복원
+    info "CPU 설정 복원 중..."
+    for gov_file in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+        echo "powersave" > "$gov_file" 2>/dev/null || true
+    done
+    if [ -f /sys/devices/system/cpu/intel_pstate/no_turbo ]; then
+        echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || true
+    fi
+    log "CPU Turbo Boost 복원, governor 유지(powersave)"
+}
+
+########################################
 # 시스템 정보 수집
 ########################################
 collect_system_info() {
@@ -168,6 +222,15 @@ collect_system_info() {
 
     echo "--- Temperatures ---" >> "$info_file"
     sensors 2>/dev/null >> "$info_file" 2>&1
+    echo "" >> "$info_file"
+
+    echo "--- CPU Governor & Frequency ---" >> "$info_file"
+    echo "governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null)" >> "$info_file"
+    echo "no_turbo: $(cat /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null)" >> "$info_file"
+    for i in 0 1 2 3; do
+        local f=$(cat /sys/devices/system/cpu/cpu${i}/cpufreq/scaling_cur_freq 2>/dev/null)
+        echo "cpu${i}_freq_khz: $f" >> "$info_file"
+    done
     echo "" >> "$info_file"
 
     echo "--- Storage ---" >> "$info_file"
@@ -215,7 +278,10 @@ echo ""
 # 하드웨어 검증
 verify_hardware
 
-# 시스템 정보
+# CPU 주파수 고정 (4개 config 간 일관성)
+lock_cpu_frequency
+
+# 시스템 정보 (CPU 고정 후 기록)
 collect_system_info
 
 # 안정화 대기
@@ -248,8 +314,10 @@ for run in $(seq 1 $REPEAT); do
 done
 
 ########################################
-# 요약
+# CPU 복원 & 요약
 ########################################
+restore_cpu_frequency
+
 phase "Config $CONFIG 측정 완료!"
 
 log "생성된 파일:"
