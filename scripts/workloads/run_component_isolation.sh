@@ -140,57 +140,105 @@ verify_hardware() {
 }
 
 ########################################
-# CPU 주파수 고정 (DVFS 제어)
+# 환경 제어 (모든 config 간 일관성 보장)
 ########################################
-lock_cpu_frequency() {
-    phase "CPU 주파수 고정 (idle 실험 일관성 보장)"
+lock_environment() {
+    phase "실험 환경 고정 (4 config 간 일관성 보장)"
 
-    # 현재 governor 확인
+    # ── 1. CPU: governor + Turbo Boost ──
+    log "[1/5] CPU 주파수 고정"
     local current_gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null)
-    log "현재 CPU governor: $current_gov"
+    log "  현재 governor: $current_gov"
 
-    # powersave governor 설정 (최저 주파수 고정)
     local changed=0
     for gov_file in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
         if [ -f "$gov_file" ]; then
             echo "powersave" > "$gov_file" 2>/dev/null && changed=$((changed+1))
         fi
     done
-    log "CPU governor -> powersave: ${changed}개 코어 설정"
+    log "  governor -> powersave: ${changed}개 코어"
 
-    # Turbo Boost 비활성화
     if [ -f /sys/devices/system/cpu/intel_pstate/no_turbo ]; then
         echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null
-        log "Intel Turbo Boost: 비활성화"
+        log "  Turbo Boost: OFF"
     fi
 
-    # 확인: 실제 주파수 읽기
     sleep 1
     local freq_khz=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null)
     local freq_mhz=$((freq_khz / 1000))
-    log "현재 CPU0 주파수: ${freq_mhz}MHz"
-
     local min_freq=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq 2>/dev/null)
     local min_mhz=$((min_freq / 1000))
-    log "최소 주파수: ${min_mhz}MHz"
+    log "  CPU0 주파수: ${freq_mhz}MHz (최소: ${min_mhz}MHz)"
 
-    if [ "$freq_khz" -le $((min_freq + 200000)) ]; then
-        log "CPU 주파수 고정 확인: 최저 근처에서 안정"
-    else
-        warn "CPU 주파수가 예상보다 높음 (${freq_mhz}MHz). 측정에 영향 가능"
+    if [ "$freq_khz" -gt $((min_freq + 200000)) ]; then
+        warn "  CPU 주파수가 예상보다 높음!"
     fi
+
+    # ── 2. GPU: Persistence Mode ──
+    log "[2/5] GPU Persistence Mode"
+    if command -v nvidia-smi &>/dev/null; then
+        nvidia-smi -pm 1 2>/dev/null && log "  Persistence Mode: ON" || warn "  Persistence Mode 설정 실패"
+        # P-state 확인
+        local pstates=$(nvidia-smi --query-gpu=pstate --format=csv,noheader 2>/dev/null | tr '\n' ' ')
+        log "  GPU P-states: $pstates"
+    fi
+
+    # ── 3. WiFi 비활성화 ──
+    log "[3/5] WiFi 비활성화"
+    if command -v nmcli &>/dev/null; then
+        nmcli radio wifi off 2>/dev/null && log "  WiFi: OFF" || log "  WiFi: 이미 OFF 또는 nmcli 없음"
+    elif ip link show wlan0 &>/dev/null; then
+        ip link set wlan0 down 2>/dev/null && log "  wlan0: DOWN" || log "  wlan0 없음"
+    else
+        log "  WiFi 인터페이스 없음 (OK)"
+    fi
+
+    # ── 4. 팬 RPM 기록 ──
+    log "[4/5] 팬 RPM 기록"
+    local fan_info=""
+    for fan_file in /sys/class/hwmon/hwmon*/fan*_input; do
+        if [ -f "$fan_file" ]; then
+            local rpm=$(cat "$fan_file" 2>/dev/null)
+            local fname=$(basename "$fan_file")
+            fan_info="${fan_info} ${fname}=${rpm}"
+        fi
+    done
+    if [ -n "$fan_info" ]; then
+        log "  팬 RPM:$fan_info"
+    else
+        log "  팬 RPM 읽기 불가 (hwmon 없음)"
+    fi
+
+    # ── 5. 디스플레이/모니터 상태 ──
+    log "[5/5] 디스플레이 상태"
+    if command -v nvidia-smi &>/dev/null; then
+        local display_gpu=$(nvidia-smi --query-gpu=display_active --format=csv,noheader 2>/dev/null | tr '\n' ' ')
+        log "  Display active: $display_gpu"
+        warn "  중요: 모니터 연결 상태를 4개 config 모두 동일하게 유지하세요!"
+    fi
+
+    echo ""
+    log "환경 고정 완료"
 }
 
-restore_cpu_frequency() {
-    # 실험 후 원래 설정 복원
-    info "CPU 설정 복원 중..."
-    for gov_file in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
-        echo "powersave" > "$gov_file" 2>/dev/null || true
-    done
+restore_environment() {
+    info "실험 환경 복원 중..."
+
+    # CPU Turbo Boost 복원
     if [ -f /sys/devices/system/cpu/intel_pstate/no_turbo ]; then
         echo 0 > /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || true
     fi
-    log "CPU Turbo Boost 복원, governor 유지(powersave)"
+    log "  Turbo Boost: 복원 (ON)"
+
+    # WiFi 복원
+    if command -v nmcli &>/dev/null; then
+        nmcli radio wifi on 2>/dev/null || true
+    fi
+    log "  WiFi: 복원 (ON)"
+
+    # GPU persistence는 유지 (해제하면 오히려 불안정)
+    log "  GPU Persistence Mode: 유지"
+    log "환경 복원 완료"
 }
 
 ########################################
@@ -233,8 +281,31 @@ collect_system_info() {
     done
     echo "" >> "$info_file"
 
+    echo "--- GPU P-states & Persistence ---" >> "$info_file"
+    nvidia-smi --query-gpu=index,name,pstate,power.draw,persistence_mode,display_active \
+        --format=csv 2>/dev/null >> "$info_file" 2>&1
+    echo "" >> "$info_file"
+
+    echo "--- Fan RPM ---" >> "$info_file"
+    for fan_file in /sys/class/hwmon/hwmon*/fan*_input; do
+        [ -f "$fan_file" ] && echo "$(basename $fan_file): $(cat $fan_file 2>/dev/null)" >> "$info_file"
+    done
+    echo "" >> "$info_file"
+
+    echo "--- Network Interfaces ---" >> "$info_file"
+    ip link show 2>/dev/null | grep -E "^[0-9]+:|state" >> "$info_file" 2>&1
+    echo "" >> "$info_file"
+
+    echo "--- USB Devices ---" >> "$info_file"
+    lsusb 2>/dev/null >> "$info_file" 2>&1
+    echo "" >> "$info_file"
+
     echo "--- Storage ---" >> "$info_file"
     lsblk -d -o NAME,SIZE,MODEL,ROTA 2>/dev/null >> "$info_file" 2>&1
+    echo "" >> "$info_file"
+
+    echo "--- PSU Info (if available) ---" >> "$info_file"
+    echo "Note: Check Alienware specs for PSU wattage and 80Plus rating" >> "$info_file"
     echo "" >> "$info_file"
 
     chown $REAL_UID:$REAL_GID "$info_file"
@@ -278,10 +349,10 @@ echo ""
 # 하드웨어 검증
 verify_hardware
 
-# CPU 주파수 고정 (4개 config 간 일관성)
-lock_cpu_frequency
+# 환경 고정 (CPU, GPU, WiFi, 팬 기록)
+lock_environment
 
-# 시스템 정보 (CPU 고정 후 기록)
+# 시스템 정보 (환경 고정 후 기록)
 collect_system_info
 
 # 안정화 대기
@@ -316,7 +387,7 @@ done
 ########################################
 # CPU 복원 & 요약
 ########################################
-restore_cpu_frequency
+restore_environment
 
 phase "Config $CONFIG 측정 완료!"
 

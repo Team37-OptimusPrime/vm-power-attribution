@@ -253,6 +253,36 @@ class CPUFreqReader:
         return freqs
 
 
+class FanReader:
+    """팬 RPM 읽기 (hwmon)"""
+
+    def __init__(self):
+        self.fan_files = self._discover_fans()
+
+    def _discover_fans(self) -> list:
+        """hwmon에서 fan*_input 파일 탐색"""
+        fans = []
+        import glob
+        for f in sorted(glob.glob("/sys/class/hwmon/hwmon*/fan*_input")):
+            fans.append(f)
+        if fans:
+            print(f"[INFO] Detected {len(fans)} fan sensor(s)")
+        return fans
+
+    def header_columns(self) -> list:
+        return [f'fan{i}_rpm' for i in range(len(self.fan_files))]
+
+    def read(self) -> dict:
+        data = {}
+        for i, path in enumerate(self.fan_files):
+            try:
+                rpm = int(Path(path).read_text().strip())
+                data[f'fan{i}_rpm'] = rpm
+            except (FileNotFoundError, PermissionError, ValueError):
+                data[f'fan{i}_rpm'] = 0
+        return data
+
+
 class MemReader:
     """메모리 사용량 읽기"""
 
@@ -305,6 +335,7 @@ def main():
     io_reader = IOReader()
     mem = MemReader()
     cpufreq = CPUFreqReader()
+    fan = FanReader()
 
     # 첫 번째 읽기 (델타 계산용)
     rapl.read_power()
@@ -312,10 +343,19 @@ def main():
     io_reader.read()
     time.sleep(0.1)
 
-    # CSV 헤더 (동적: GPU 수, CPU 코어 수에 따라 변경)
+    # CSV 헤더 (동적: GPU 수, CPU 코어 수, 팬 수에 따라 변경)
     gpu_cols = ','.join(nvidia.header_columns())
     freq_cols = ','.join([f'cpu{i}_mhz' for i in range(cpufreq.num_cores)])
-    header = f"timestamp,cpu_pct,iowait_pct,rapl_package_w,rapl_core_w,rapl_dram_w,{gpu_cols},io_read_kbs,io_write_kbs,mem_used_pct,{freq_cols}"
+    fan_cols = ','.join(fan.header_columns())
+    header_parts = [
+        "timestamp,cpu_pct,iowait_pct,rapl_package_w,rapl_core_w,rapl_dram_w",
+        gpu_cols,
+        "io_read_kbs,io_write_kbs,mem_used_pct",
+        freq_cols,
+    ]
+    if fan_cols:
+        header_parts.append(fan_cols)
+    header = ','.join(header_parts)
 
     outfile = None
     if not args.no_file:
@@ -349,6 +389,7 @@ def main():
             io_stats = io_reader.read()
             mem_stats = mem.read()
             freq_stats = cpufreq.read()
+            fan_stats = fan.read()
 
             # RAPL 값 추출 (없으면 0)
             pkg_w = rapl_power.get('package-0', 0)
@@ -365,6 +406,9 @@ def main():
             # CPU frequency 값
             freq_values = ','.join([f"{freq_stats.get(f'cpu{i}_mhz', 0):.0f}" for i in range(cpufreq.num_cores)])
 
+            # Fan RPM 값
+            fan_values = ','.join([str(fan_stats.get(col, 0)) for col in fan.header_columns()])
+
             csv_line = (
                 f"{timestamp},{cpu_stats['cpu_pct']:.1f},{cpu_stats['iowait_pct']:.1f},"
                 f"{pkg_w:.2f},{core_w:.2f},{dram_w:.2f},"
@@ -372,6 +416,8 @@ def main():
                 f"{io_stats['io_read_kbs']:.1f},{io_stats['io_write_kbs']:.1f},"
                 f"{mem_stats['mem_used_pct']:.1f},{freq_values}"
             )
+            if fan_values:
+                csv_line += f",{fan_values}"
 
             print(csv_line)
 
