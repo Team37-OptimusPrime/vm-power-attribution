@@ -85,33 +85,68 @@ class RAPLReader:
 
 
 class NvidiaReader:
-    """nvidia-smi를 통한 GPU 메트릭 읽기"""
+    """nvidia-smi를 통한 GPU 메트릭 읽기 (Multi-GPU 지원)"""
 
-    def read(self) -> dict:
+    def __init__(self):
+        self.num_gpus = self._detect_gpus()
+
+    def _detect_gpus(self) -> int:
+        """장착된 GPU 수 감지"""
         try:
             result = subprocess.run(
-                ['nvidia-smi', '--query-gpu=power.draw,temperature.gpu,utilization.gpu,utilization.memory,memory.used',
-                 '--format=csv,noheader,nounits'],
-                capture_output=True, text=True, timeout=2
+                ['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'],
+                capture_output=True, text=True, timeout=3
             )
             if result.returncode == 0:
-                parts = result.stdout.strip().split(', ')
-                return {
-                    'gpu_power_w': float(parts[0]),
-                    'gpu_temp_c': int(parts[1]),
-                    'gpu_util_pct': int(parts[2]),
-                    'gpu_mem_util_pct': int(parts[3]),
-                    'gpu_mem_used_mb': int(parts[4]),
-                }
-        except Exception as e:
+                lines = [l.strip() for l in result.stdout.strip().split('\n') if l.strip()]
+                count = len(lines)
+                print(f"[INFO] Detected {count} GPU(s): {', '.join(lines)}")
+                return count
+        except Exception:
             pass
-        return {
-            'gpu_power_w': 0,
-            'gpu_temp_c': 0,
-            'gpu_util_pct': 0,
-            'gpu_mem_util_pct': 0,
-            'gpu_mem_used_mb': 0,
-        }
+        return 0
+
+    def header_columns(self) -> list:
+        """동적 CSV 헤더 컬럼 생성"""
+        cols = ['gpu_power_w']  # 총 GPU 전력 (합산)
+        for i in range(self.num_gpus):
+            cols.extend([
+                f'gpu{i}_power_w', f'gpu{i}_temp_c',
+                f'gpu{i}_util_pct', f'gpu{i}_mem_used_mb',
+            ])
+        return cols
+
+    def read(self) -> dict:
+        data = {'gpu_power_w': 0.0}
+        for i in range(self.num_gpus):
+            data[f'gpu{i}_power_w'] = 0.0
+            data[f'gpu{i}_temp_c'] = 0
+            data[f'gpu{i}_util_pct'] = 0
+            data[f'gpu{i}_mem_used_mb'] = 0
+
+        try:
+            result = subprocess.run(
+                ['nvidia-smi', '--query-gpu=power.draw,temperature.gpu,utilization.gpu,memory.used',
+                 '--format=csv,noheader,nounits'],
+                capture_output=True, text=True, timeout=3
+            )
+            if result.returncode == 0:
+                lines = [l.strip() for l in result.stdout.strip().split('\n') if l.strip()]
+                total_power = 0.0
+                for i, line in enumerate(lines):
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 4:
+                        pw = float(parts[0])
+                        total_power += pw
+                        data[f'gpu{i}_power_w'] = pw
+                        data[f'gpu{i}_temp_c'] = int(float(parts[1]))
+                        data[f'gpu{i}_util_pct'] = int(float(parts[2]))
+                        data[f'gpu{i}_mem_used_mb'] = int(float(parts[3]))
+                data['gpu_power_w'] = total_power
+        except Exception:
+            pass
+
+        return data
 
 
 class CPUReader:
@@ -277,9 +312,10 @@ def main():
     io_reader.read()
     time.sleep(0.1)
 
-    # CSV 헤더
+    # CSV 헤더 (동적: GPU 수, CPU 코어 수에 따라 변경)
+    gpu_cols = ','.join(nvidia.header_columns())
     freq_cols = ','.join([f'cpu{i}_mhz' for i in range(cpufreq.num_cores)])
-    header = f"timestamp,cpu_pct,iowait_pct,rapl_package_w,rapl_core_w,rapl_dram_w,gpu_power_w,gpu_temp_c,gpu_util_pct,io_read_kbs,io_write_kbs,mem_used_pct,{freq_cols}"
+    header = f"timestamp,cpu_pct,iowait_pct,rapl_package_w,rapl_core_w,rapl_dram_w,{gpu_cols},io_read_kbs,io_write_kbs,mem_used_pct,{freq_cols}"
 
     outfile = None
     if not args.no_file:
@@ -309,7 +345,7 @@ def main():
             # 메트릭 수집
             cpu_stats = cpu.read()
             rapl_power = rapl.read_power()
-            gpu = nvidia.read()
+            gpu_stats = nvidia.read()
             io_stats = io_reader.read()
             mem_stats = mem.read()
             freq_stats = cpufreq.read()
@@ -319,13 +355,20 @@ def main():
             core_w = rapl_power.get('package-0-core', 0)
             dram_w = rapl_power.get('package-0-dram', 0)
 
+            # GPU 값 (동적)
+            gpu_values = ','.join([
+                f"{gpu_stats.get(col, 0):.2f}" if 'power' in col
+                else f"{gpu_stats.get(col, 0)}"
+                for col in nvidia.header_columns()
+            ])
+
             # CPU frequency 값
             freq_values = ','.join([f"{freq_stats.get(f'cpu{i}_mhz', 0):.0f}" for i in range(cpufreq.num_cores)])
 
             csv_line = (
                 f"{timestamp},{cpu_stats['cpu_pct']:.1f},{cpu_stats['iowait_pct']:.1f},"
                 f"{pkg_w:.2f},{core_w:.2f},{dram_w:.2f},"
-                f"{gpu['gpu_power_w']:.2f},{gpu['gpu_temp_c']},{gpu['gpu_util_pct']},"
+                f"{gpu_values},"
                 f"{io_stats['io_read_kbs']:.1f},{io_stats['io_write_kbs']:.1f},"
                 f"{mem_stats['mem_used_pct']:.1f},{freq_values}"
             )
