@@ -80,6 +80,27 @@ cleanup() {
 
 trap cleanup EXIT
 
+# ── CPU 환경 통제 (component isolation과 동일하게) ──
+PSTATE_DIR="/sys/devices/system/cpu/intel_pstate"
+if [ -d "$PSTATE_DIR" ]; then
+    ORIG_NO_TURBO=$(cat "$PSTATE_DIR/no_turbo" 2>/dev/null)
+    echo 1 > "$PSTATE_DIR/no_turbo"
+    log "no_turbo 설정: $(cat $PSTATE_DIR/no_turbo) (Turbo Boost OFF)"
+else
+    warn "intel_pstate 미지원 → no_turbo 설정 불가"
+    ORIG_NO_TURBO=""
+fi
+
+# CPU governor → powersave (component isolation과 동일)
+ORIG_GOVERNOR=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null)
+for cpu_dir in /sys/devices/system/cpu/cpu*/cpufreq; do
+    echo "powersave" > "$cpu_dir/scaling_governor" 2>/dev/null || true
+done
+log "CPU governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null)"
+
+# GPU persistence mode (측정 안정성)
+nvidia-smi -pm 1 > /dev/null 2>&1 || true
+
 # 로그 디렉토리 생성
 mkdir -p "$LOG_DIR"
 chown -R $REAL_UID:$REAL_GID "$LOG_DIR"
@@ -193,8 +214,17 @@ Tests:
   2. seq_read       - Sequential Read  (bs=1M, iodepth=32)
   3. seq_write      - Sequential Write (bs=1M, iodepth=32)
 
+CPU Environment Control:
+  no_turbo: $(cat /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || echo 'N/A')
+  governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo 'N/A')
+  max_freq: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq 2>/dev/null || echo 'N/A') kHz
+
+GPU:
+$(nvidia-smi --query-gpu=index,name,persistence_mode,power.draw --format=csv,noheader 2>/dev/null || echo '  N/A')
+
 Environment: Config A (2GPU+2DIMM, 32GB) - 동시실행 실험과 동일
 Note: Random IO 제거 (SSD sequential만 필요 - 교수님 피드백)
+Note: v2 재실험 - no_turbo=1, governor=powersave 강제 (component isolation과 동일 환경)
 EOF
 
 info "Storage: $(lsblk -dn -o MODEL /dev/nvme0n1 2>/dev/null || echo 'unknown')"
