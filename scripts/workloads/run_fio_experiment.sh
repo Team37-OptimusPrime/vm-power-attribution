@@ -1,16 +1,19 @@
 #!/bin/bash
-# Phase 2.0b: fio Storage 에너지 실험
+# Phase 2.1: fio Storage 에너지 실험 (v2 - 교수님 피드백 반영)
 #
-# 목적: Storage IO에 의한 에너지 소비 파라미터 도출
-#   Storage_power = Wall(fio) - Wall(idle) - dCPU(RAPL)
-#   Storage_per_throughput = Storage_power / Throughput(MB/s)
+# 목적: Storage IO에 의한 순수 에너지 파라미터(W per MB/s) 도출
+#   Storage_power = Wall(RPICT) - Wall_idle(RPICT) - dCPU(RAPL) - dGPU(nvidia-smi)
+#   Storage_rate  = Storage_power / Throughput(MB/s)
+#
+# 핵심 변경 (v1 대비):
+#   - Random IO 제거 (교수님: "SSD이므로 sequential만 측정하면 됨")
+#   - Config A 환경(2GPU+2DIMM)에서 실행 (동시실행 실험과 동일 환경)
+#   - RPICT 동시 측정 필수 → 분석 시 CPU/GPU delta 분리
 #
 # 실험 구성:
 #   1. Idle Baseline (워크로드 없음)
 #   2. Sequential Read  (bs=1M, iodepth=32, direct=1)
 #   3. Sequential Write (bs=1M, iodepth=32, direct=1)
-#   4. Random Read      (bs=4K, iodepth=32, direct=1)
-#   5. Random Write     (bs=4K, iodepth=32, direct=1)
 #
 # Usage:
 #   sudo -E ./run_fio_experiment.sh [test_name]
@@ -19,6 +22,7 @@
 #   - fio가 설치되어 있어야 함: sudo apt install fio
 #   - Direct IO 사용하여 페이지 캐시 우회
 #   - /tmp/fio_test 파일 사용 (4GB) → 실험 후 삭제
+#   - RPICT를 반드시 동시에 수집할 것!
 
 set +e
 
@@ -41,7 +45,7 @@ fi
 # 설정
 TEST_NAME=${1:-"fio_$(date +%Y%m%d_%H%M%S)"}
 BASE_DIR="$HOME/vm-power-attribution"
-LOG_DIR="$BASE_DIR/data/raw/alienware/phase2.0_fio"
+LOG_DIR="$BASE_DIR/data/raw/alienware/phase2.1_fio"
 SCRIPT_DIR="$BASE_DIR/scripts/measurement"
 
 FIO_FILE="/tmp/fio_test"     # fio 테스트 파일 경로
@@ -188,8 +192,9 @@ Tests:
   1. idle_baseline  - No IO
   2. seq_read       - Sequential Read  (bs=1M, iodepth=32)
   3. seq_write      - Sequential Write (bs=1M, iodepth=32)
-  4. rand_read      - Random Read      (bs=4K, iodepth=32)
-  5. rand_write     - Random Write     (bs=4K, iodepth=32)
+
+Environment: Config A (2GPU+2DIMM, 32GB) - 동시실행 실험과 동일
+Note: Random IO 제거 (SSD sequential만 필요 - 교수님 피드백)
 EOF
 
 info "Storage: $(lsblk -dn -o MODEL /dev/nvme0n1 2>/dev/null || echo 'unknown')"
@@ -243,16 +248,6 @@ run_fio_phase "seq_read" "read" "1M" "32"
 run_fio_phase "seq_write" "write" "1M" "32"
 
 ########################################
-# Phase 3: Random Read
-########################################
-run_fio_phase "rand_read" "randread" "4k" "32"
-
-########################################
-# Phase 4: Random Write
-########################################
-run_fio_phase "rand_write" "randwrite" "4k" "32"
-
-########################################
 # 완료
 ########################################
 phase "fio 실험 완료"
@@ -266,16 +261,12 @@ echo "  [전력 측정]"
 echo "  idle_baseline_host.csv   - Idle 전력"
 echo "  seq_read_host.csv        - Sequential Read 전력"
 echo "  seq_write_host.csv       - Sequential Write 전력"
-echo "  rand_read_host.csv       - Random Read 전력"
-echo "  rand_write_host.csv      - Random Write 전력"
 echo ""
 echo "  [fio 결과]"
 echo "  seq_read_fio.json        - Sequential Read 성능"
 echo "  seq_write_fio.json       - Sequential Write 성능"
-echo "  rand_read_fio.json       - Random Read 성능"
-echo "  rand_write_fio.json      - Random Write 성능"
 
-TOTAL_TIME=$((IDLE_DURATION + (FIO_DURATION + 10 + COOLDOWN) * 4 + COOLDOWN + 10))
+TOTAL_TIME=$((IDLE_DURATION + (FIO_DURATION + 10 + COOLDOWN) * 2 + COOLDOWN + 10))
 echo ""
 log "총 실험 시간: ~${TOTAL_TIME}초 (~$((TOTAL_TIME / 60))분)"
 
