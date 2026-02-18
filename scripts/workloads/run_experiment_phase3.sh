@@ -273,6 +273,8 @@ start_ai_workload() {
     local script=""
     local extra_args=""
 
+    local log_file="$LOG_DIR/${workload_type}_gpu${gpu_id}_${slice}.log"
+
     case "$workload_type" in
         yolo_medium)
             # YOLO는 별도 실행 방식 (yolo CLI)
@@ -284,11 +286,11 @@ start_ai_workload() {
                     cd $WORKLOAD_DIR
                     END_TIME=\$((SECONDS + $duration - 5))
                     while [ \$SECONDS -lt \$END_TIME ]; do
-                        yolo predict model=yolov8m.pt source=test_video.mp4 device=0 verbose=False 2>/dev/null || true
+                        yolo predict model=yolov8m.pt source=test_video.mp4 device=0 verbose=False 2>&1 || true
                     done
-                " &
+                " > "$log_file" 2>&1 &
             eval "${pid_var}=$!"
-            log "YOLO Medium 시작 (PID: ${!pid_var}, GPU${gpu_id}, ${slice})"
+            log "YOLO Medium 시작 (PID: ${!pid_var}, GPU${gpu_id}, ${slice}, log: $log_file)"
             return
             ;;
         pytorch_gemm)
@@ -309,15 +311,16 @@ start_ai_workload() {
             ;;
     esac
 
+    local log_file="$LOG_DIR/${workload_type}_gpu${gpu_id}_${slice}.log"
     timeout $((duration + 10)) \
         sudo CUDA_VISIBLE_DEVICES=$gpu_id systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
         bash -c "
             export CUDA_VISIBLE_DEVICES=$gpu_id
             source $WORKLOAD_DIR/yolo_venv/bin/activate
-            python3 $script $extra_args
-        " &
+            python3 $script $extra_args 2>&1
+        " > "$log_file" 2>&1 &
     eval "${pid_var}=$!"
-    log "${workload_type} 시작 (PID: ${!pid_var}, GPU${gpu_id}, ${slice})"
+    log "${workload_type} 시작 (PID: ${!pid_var}, GPU${gpu_id}, ${slice}, log: $log_file)"
 }
 
 ########################################
