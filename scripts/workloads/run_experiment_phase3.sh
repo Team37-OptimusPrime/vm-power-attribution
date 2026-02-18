@@ -210,6 +210,7 @@ SSD: $(lsblk -dn -o MODEL /dev/nvme0n1 2>/dev/null || echo "N/A")
 Baseline: ${BASELINE_DURATION}s
 Each Phase: ${WORKLOAD_DURATION}s
 Cooldown: ${COOLDOWN}s
+Page cache: dropped (sync + echo 3 > drop_caches) between every phase
 Total Phases: 16 (1 baseline + 5 solo + 4 AI+B2 + 6 AI+AI)
 Estimated time: $((BASELINE_DURATION + WORKLOAD_DURATION*15 + COOLDOWN*15))s
 
@@ -407,6 +408,15 @@ wait_loggers() {
 }
 
 ########################################
+# 페이지 캐시 초기화 (Phase 간 I/O 공정성 보장)
+########################################
+drop_caches() {
+    sync
+    echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+    log "Page cache dropped (sync + drop_caches)"
+}
+
+########################################
 # Solo Phase 실행 헬퍼
 ########################################
 run_solo_ai_phase() {
@@ -424,6 +434,7 @@ run_solo_ai_phase() {
 
     wait_loggers
     stop_workloads
+    drop_caches
 
     log "${phase_name} 완료. Cooldown ${COOLDOWN}s..."
     sleep $COOLDOWN
@@ -442,6 +453,7 @@ run_solo_b2_phase() {
 
     wait_loggers
     stop_workloads
+    drop_caches
 
     log "B2 Solo 완료. Cooldown ${COOLDOWN}s..."
     sleep $COOLDOWN
@@ -471,6 +483,7 @@ run_ai_b2_phase() {
 
     wait_loggers
     stop_workloads
+    drop_caches
 
     log "${phase_name} 완료. Cooldown ${COOLDOWN}s..."
     sleep $COOLDOWN
@@ -500,6 +513,7 @@ run_ai_ai_phase() {
 
     wait_loggers
     stop_workloads
+    drop_caches
 
     log "${phase_name} 완료. Cooldown ${COOLDOWN}s..."
     sleep $COOLDOWN
@@ -541,6 +555,7 @@ info "모든 워크로드 중지 상태에서 idle 전력 측정"
 
 start_loggers "baseline" $BASELINE_DURATION
 wait_loggers
+drop_caches
 
 log "Baseline 완료. Cooldown ${COOLDOWN}s..."
 sleep $COOLDOWN
