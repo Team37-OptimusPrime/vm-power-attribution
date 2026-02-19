@@ -279,7 +279,7 @@ start_ai_workload() {
         yolo_medium)
             # YOLO는 별도 실행 방식 (yolo CLI)
             timeout $((duration + 10)) \
-                CUDA_VISIBLE_DEVICES=$gpu_id systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
+                systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
                 bash -c "
                     export CUDA_VISIBLE_DEVICES=$gpu_id
                     source $WORKLOAD_DIR/yolo_venv/bin/activate
@@ -313,7 +313,7 @@ start_ai_workload() {
 
     local log_file="$LOG_DIR/${workload_type}_gpu${gpu_id}_${slice}.log"
     timeout $((duration + 10)) \
-        CUDA_VISIBLE_DEVICES=$gpu_id systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
+        systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
         bash -c "
             export CUDA_VISIBLE_DEVICES=$gpu_id
             source $WORKLOAD_DIR/yolo_venv/bin/activate
