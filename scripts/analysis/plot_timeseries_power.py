@@ -122,7 +122,7 @@ def smooth(series: pd.Series, window: int = 5) -> pd.Series:
 
 
 def plot_full_timeline(host_df: pd.DataFrame, rpict_df: pd.DataFrame,
-                       phases: list, out_path: str):
+                       phases: list, out_path: str, run_id: str = ""):
     """전체 실험 타임라인 그래프."""
     # 시작 시각 기준 경과 시간(분) 계산
     t0 = host_df["timestamp"].iloc[0]
@@ -163,7 +163,9 @@ def plot_full_timeline(host_df: pd.DataFrame, rpict_df: pd.DataFrame,
 
     ax.set_xlabel("Elapsed Time (min)", fontsize=11)
     ax.set_ylabel("Power (W)", fontsize=11)
-    ax.set_title("Power Consumption Timeline — Phase 3 Experiment (Run 3)", fontsize=12)
+    run_label = run_id.upper() if run_id else "Run 1"
+    ax.set_title(f"Power Consumption Timeline — Phase 3 Experiment ({run_label})", fontsize=12)
+
     ax.set_ylim(bottom=0)
     ax.grid(axis="y", linestyle="--", alpha=0.4)
     ax.set_xlim(host_df["t_min"].iloc[0], host_df["t_min"].iloc[-1])
@@ -252,7 +254,10 @@ def main():
     args = parser.parse_args()
 
     run_id   = args.run
-    run_dir  = os.path.join(DATA_DIR, "alienware", f"phase3_fixed_{run_id}")
+    if args.no_pt:
+        run_dir = os.path.join(DATA_DIR, "alienware", f"phase3_nopt_{run_id}")
+    else:
+        run_dir = os.path.join(DATA_DIR, "alienware", f"phase3_fixed_{run_id}")
     rpict_map = {
         "run1":  os.path.join(RPICT_DIR, "phase3-rerun.csv"),  # run1 AI+AI subset
         "run3":  os.path.join(RPICT_DIR, "phase3_run3.csv"),
@@ -314,7 +319,7 @@ def main():
     if len(phases) == 1:
         plot_single_phase(host_df, rpict_df, phases[0], out_path)
     else:
-        plot_full_timeline(host_df, rpict_df, phases, out_path)
+        plot_full_timeline(host_df, rpict_df, phases, out_path, run_id=run_id or "")
 
 
 if __name__ == "__main__":
