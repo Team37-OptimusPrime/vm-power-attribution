@@ -8,10 +8,16 @@ Phase 2.2 추출 스크립트 기반, Phase 3 워크로드 확장:
             AI+AI → A=GPU0, B=GPU1
 
 출력: TSV 파일 2개
-  - system_power.tsv: 실험별 시스템 전력
-  - workload_usage.tsv: 워크로드별 자원 사용량
+  - system_power_<run>.tsv: 실험별 시스템 전력
+  - workload_usage_<run>.tsv: 워크로드별 자원 사용량
+
+Usage:
+  python3 extract_phase3_data.py                            # 기본 (run1, PyTorch 포함)
+  python3 extract_phase3_data.py --run run3                 # run3 (PyTorch 포함)
+  python3 extract_phase3_data.py --run run4 --no-pt         # run4 (PyTorch 제외)
 """
 
+import argparse
 import csv
 import os
 from datetime import datetime
@@ -19,13 +25,12 @@ from pathlib import Path
 
 BASE = Path(os.path.expanduser(
     "~/Desktop/Univ./Ewha/2025-2026 Capstone PJT/vm-power-attribution"))
-RPICT_FILE = BASE / "data/raw/rpict/phase3.csv"
 OUTPUT_DIR = BASE / "reports/phase3"
 
-# 실험 Phase 정의
+# 실험 Phase 정의 (전체 — PyTorch 포함)
 # (파일 prefix, 타입, workload_A, workload_B, concurrent_type)
 # concurrent_type: None(solo/idle), "ai_b2", "ai_ai"
-PHASES = [
+PHASES_ALL = [
     # Baseline
     ("baseline", "idle", None, None, None),
 
@@ -50,6 +55,13 @@ PHASES = [
     ("PTGPT_concurrent", "concurrent", "PT(PyTorch_GEMM)", "GPT(GPT-2)", "ai_ai"),
     ("RNGPT_concurrent", "concurrent", "RN(ResNet18)", "GPT(GPT-2)", "ai_ai"),
 ]
+
+# PyTorch 제외 버전 (11 phases) — 정확한 이름 일치로 필터
+PT_PHASE_NAMES = {
+    "PT_pytorch_gemm", "PTB2_concurrent", "A2PT_concurrent",
+    "PTRN_concurrent", "PTGPT_concurrent",
+}
+PHASES_NOPT = [p for p in PHASES_ALL if p[0] not in PT_PHASE_NAMES]
 
 # 안정 구간: 앞 15초 제거, 뒤 5초 제거
 TRIM_START = 15
@@ -131,18 +143,22 @@ def get_stable_duration(stable_rows):
 
 
 def load_rpict():
-    """RPICT 데이터 로드"""
-    if not RPICT_FILE.exists():
-        print(f"[WARN] RPICT 파일 없음: {RPICT_FILE}")
-        print("       Wall power는 0.0으로 표시됩니다.")
-        return []
-    rows = read_csv_rows(RPICT_FILE)
+    """RPICT 데이터 로드 (여러 파일 병합)"""
     result = []
-    for r in rows:
-        result.append({
-            "timestamp": parse_ts(r["timestamp"]),
-            "wall_power_w": float(r["power1_w"]),
-        })
+    for rpict_file in RPICT_FILES:
+        if not rpict_file.exists():
+            print(f"[WARN] RPICT 파일 없음: {rpict_file}")
+            continue
+        rows = read_csv_rows(rpict_file)
+        for r in rows:
+            result.append({
+                "timestamp": parse_ts(r["timestamp"]),
+                "wall_power_w": float(r["power1_w"]),
+            })
+        print(f"  RPICT 로드: {rpict_file.name} ({len(rows)}개 샘플)")
+    if not result:
+        print("[WARN] RPICT 데이터 없음. Wall power는 0.0으로 표시됩니다.")
+    result.sort(key=lambda x: x["timestamp"])
     return result
 
 
@@ -165,12 +181,14 @@ def is_ai_workload(wl_name):
     return any(tag in wl_name for tag in ["YOLO", "PyTorch", "ResNet", "GPT"])
 
 
-def process_data(data_dir, rpict_data):
+def process_data(data_dir, rpict_data, phases=None):
     """Phase 3 데이터 처리"""
+    if phases is None:
+        phases = PHASES_ALL
     system_rows = []
     workload_rows = []
 
-    for phase_name, phase_type, wl_a, wl_b, concurrent_type in PHASES:
+    for phase_name, phase_type, wl_a, wl_b, concurrent_type in phases:
         host_file = data_dir / f"{phase_name}_host.csv"
         cgroup_file = data_dir / f"{phase_name}_cgroup.csv"
 
@@ -218,6 +236,10 @@ def process_data(data_dir, rpict_data):
         else:
             gpu_note = "idle: GPU0+GPU1_idle"
 
+        # Others = Wall - CPU - GPU0 - GPU1 - Memory
+        component_sum = cpu_power + gpu0_r + gpu1_r + mem_power
+        others_power = wall_power - component_sum
+
         # 시스템 행
         sys_row = {
             "round": "fixed",
@@ -235,7 +257,10 @@ def process_data(data_dir, rpict_data):
             "gpu0_util_pct": f"{gpu0_util:.1f}",
             "gpu1_util_pct": f"{gpu1_util:.1f}",
             "memory_power_W": f"{mem_power:.1f}",
+            "others_W": f"{others_power:.2f}",
+            "component_sum_W": f"{component_sum:.2f}",
             "memory_power_note": "calculated:0.2W/GB×32GB",
+            "others_note": "wall-(cpu+gpu0+gpu1+memory):PSU_loss+VRM+fans+motherboard",
             "gpu_note": gpu_note,
         }
         system_rows.append(sys_row)
@@ -288,16 +313,27 @@ def process_data(data_dir, rpict_data):
                     gpu_util = gpu1_util
                     gpu_pw = gpu1_power
 
+                # 동시실행 상대 워크로드
+                if phase_type == "concurrent":
+                    co_wl = wl_b if wl_name == wl_a else wl_a
+                else:
+                    co_wl = "-"
+
                 wl_row = {
                     "round": "fixed",
                     "experiment": phase_name,
                     "type": phase_type,
                     "concurrent_type": concurrent_type or "-",
                     "workload": wl_name,
+                    "co_workload": co_wl,
                     "cgroup": cg_name,
                     "cpu_util_pct": f"{cpu_util:.1f}",
                     "gpu_util_pct": f"{gpu_util:.1f}",
                     "gpu_power_W": f"{gpu_pw:.2f}",
+                    "gpu0_util_pct": f"{gpu0_util:.1f}",
+                    "gpu0_power_W": f"{gpu0_power:.2f}",
+                    "gpu1_util_pct": f"{gpu1_util:.1f}",
+                    "gpu1_power_W": f"{gpu1_power:.2f}",
                     "cpu_alloc_cores": "2",
                     "gpu_alloc": gpu_assign,
                     "gpu_alloc_cards": str(gpu_cards),
@@ -324,21 +360,80 @@ def write_tsv(filepath, rows, columns):
 
 
 def main():
-    print("=== Phase 3 데이터 추출 (다중 AI 워크로드 확장) ===\n")
+    parser = argparse.ArgumentParser(description="Phase 3 데이터 추출")
+    parser.add_argument("--run", default=None,
+                        help="Run ID (예: run3, run4). 미지정 시 기존 phase3_fixed 사용")
+    parser.add_argument("--no-pt", action="store_true",
+                        help="PyTorch 제외 (phase3_nopt_runN 디렉토리 사용)")
+    args = parser.parse_args()
 
-    rpict_data = load_rpict()
+    run_id = args.run
+    no_pt  = args.no_pt
+
+    # ── RPICT 파일 결정 ──
+    if run_id is None:
+        # 기본: run1 (기존 두 파일 병합)
+        rpict_files = [
+            BASE / "data/raw/rpict/phase3.csv",
+            BASE / "data/raw/rpict/phase3-rerun.csv",
+        ]
+    else:
+        rpict_files = [BASE / f"data/raw/rpict/phase3_{run_id}.csv"]
+
+    # ── 데이터 디렉토리 결정 ──
+    if run_id is None:
+        data_dir = BASE / "data/raw/alienware/phase3_fixed"
+    elif no_pt:
+        data_dir = BASE / f"data/raw/alienware/phase3_nopt_{run_id}"
+    else:
+        data_dir = BASE / f"data/raw/alienware/phase3_fixed_{run_id}"
+
+    # ── 출력 파일 접미사 ──
+    if run_id is None:
+        suffix = ""
+    elif no_pt:
+        suffix = f"_nopt_{run_id}"
+    else:
+        suffix = f"_{run_id}"
+
+    # ── Phase 목록 ──
+    phases = PHASES_NOPT if no_pt else PHASES_ALL
+
+    print("=== Phase 3 데이터 추출 (다중 AI 워크로드 확장) ===")
+    print(f"  Run: {run_id or '(기본 run1)'}  |  PyTorch 제외: {no_pt}")
+    print(f"  Data dir: {data_dir}")
+    print(f"  Phases: {len(phases)}")
+    print()
+
+    # ── RPICT 로드 ──
+    rpict_data = []
+    for rpict_file in rpict_files:
+        if not rpict_file.exists():
+            print(f"[WARN] RPICT 파일 없음: {rpict_file}")
+            continue
+        rows = read_csv_rows(rpict_file)
+        for r in rows:
+            rpict_data.append({
+                "timestamp": parse_ts(r["timestamp"]),
+                "wall_power_w": float(r["power1_w"]),
+            })
+        print(f"  RPICT 로드: {rpict_file.name} ({len(rows)}개 샘플)")
+    if not rpict_data:
+        print("[WARN] RPICT 데이터 없음. Wall power는 0.0으로 표시됩니다.")
+    rpict_data.sort(key=lambda x: x["timestamp"])
     if rpict_data:
         print(f"RPICT 데이터: {len(rpict_data)}개 샘플 로드")
 
-    data_dir = BASE / "data/raw/alienware/phase3_fixed"
     print(f"\n--- Data directory: {data_dir} ---")
-
     if not data_dir.exists():
         print(f"[ERROR] 데이터 디렉토리가 없습니다: {data_dir}")
-        print("        먼저 run_experiment_phase3.sh를 실행하세요.")
+        if no_pt:
+            print("        먼저 run_experiment_phase3_nopt.sh를 실행하세요.")
+        else:
+            print("        먼저 run_experiment_phase3.sh를 실행하세요.")
         return
 
-    sys_rows, wl_rows = process_data(data_dir, rpict_data)
+    sys_rows, wl_rows = process_data(data_dir, rpict_data, phases)
     print(f"  시스템 행: {len(sys_rows)}, 워크로드 행: {len(wl_rows)}")
 
     # TSV 출력
@@ -350,50 +445,56 @@ def main():
         "duration_s", "wall_power_W", "cpu_power_W",
         "gpu0_power_W", "gpu1_power_W", "gpu_total_W",
         "gpu0_util_pct", "gpu1_util_pct",
-        "memory_power_W", "memory_power_note", "gpu_note",
+        "memory_power_W", "others_W", "component_sum_W",
+        "memory_power_note", "others_note", "gpu_note",
     ]
-    sys_file = OUTPUT_DIR / "system_power.tsv"
+    sys_file = OUTPUT_DIR / f"system_power{suffix}.tsv"
     write_tsv(sys_file, sys_rows, sys_cols)
     print(f"\n[출력] {sys_file}")
 
     wl_cols = [
         "round", "experiment", "type", "concurrent_type",
-        "workload", "cgroup",
+        "workload", "co_workload", "cgroup",
         "cpu_util_pct", "gpu_util_pct", "gpu_power_W",
+        "gpu0_util_pct", "gpu0_power_W", "gpu1_util_pct", "gpu1_power_W",
         "cpu_alloc_cores", "gpu_alloc", "gpu_alloc_cards",
         "mem_alloc_GB", "mem_used_MB",
         "io_read_MB", "io_write_MB", "io_total_MB",
         "duration_s",
     ]
-    wl_file = OUTPUT_DIR / "workload_usage.tsv"
+    wl_file = OUTPUT_DIR / f"workload_usage{suffix}.tsv"
     write_tsv(wl_file, wl_rows, wl_cols)
     print(f"[출력] {wl_file}")
 
     # 콘솔 미리보기
     print("\n\n===== system_power.tsv 미리보기 =====")
     header = ["experiment", "type", "conc_type", "dur(s)", "wall_W",
-              "cpu_W", "gpu0_W", "gpu1_W", "gpu_tot_W", "mem_W"]
+              "cpu_W", "gpu0_W", "gpu1_W", "gpu_tot_W", "mem_W",
+              "others_W", "comp_sum"]
     print("\t".join(header))
-    print("-" * 140)
+    print("-" * 160)
     for r in sys_rows:
         print("\t".join([
             r["experiment"], r["type"], r["concurrent_type"],
             r["duration_s"], r["wall_power_W"], r["cpu_power_W"],
             r["gpu0_power_W"], r["gpu1_power_W"], r["gpu_total_W"],
-            r["memory_power_W"],
+            r["memory_power_W"], r["others_W"], r["component_sum_W"],
         ]))
 
     print("\n\n===== workload_usage.tsv 미리보기 =====")
-    header2 = ["experiment", "workload", "cgroup", "cpu%", "gpu%",
-               "gpu_W", "cores", "gpu_cards", "mem_GB", "io_MB", "dur(s)"]
+    header2 = ["experiment", "workload", "co_workload", "cgroup",
+               "cpu%", "gpu%", "gpu_W",
+               "gpu0_%", "gpu0_W", "gpu1_%", "gpu1_W",
+               "io_MB", "dur(s)"]
     print("\t".join(header2))
-    print("-" * 140)
+    print("-" * 160)
     for r in wl_rows:
         print("\t".join([
-            r["experiment"], r["workload"], r["cgroup"],
+            r["experiment"], r["workload"], r["co_workload"], r["cgroup"],
             r["cpu_util_pct"], r["gpu_util_pct"], r["gpu_power_W"],
-            r["cpu_alloc_cores"], r["gpu_alloc_cards"],
-            r["mem_alloc_GB"], r["io_total_MB"], r["duration_s"],
+            r["gpu0_util_pct"], r["gpu0_power_W"],
+            r["gpu1_util_pct"], r["gpu1_power_W"],
+            r["io_total_MB"], r["duration_s"],
         ]))
 
     # 참고 사항
