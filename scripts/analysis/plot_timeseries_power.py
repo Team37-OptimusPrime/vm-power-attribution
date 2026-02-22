@@ -28,24 +28,24 @@ RPICT_DIR = os.path.join(DATA_DIR, "rpict")
 OUT_DIR   = os.path.join(BASE_DIR, "reports", "phase3", "figures")
 
 # ── Phase 정의 (PyTorch 포함 전체 / 제외 모두 지원) ──────────
-# 표시용 레이블
+# 표시용 레이블 (교수님 피드백 반영: Solo 제거, GPT-2→GPT2, RN→ResNet, Node→Node.js)
 PHASE_LABELS = {
     "baseline":         "Baseline",
-    "A2_yolo_medium":   "YOLO\n(solo)",
-    "PT_pytorch_gemm":  "PyTorch\n(solo)",
-    "RN_resnet18":      "ResNet\n(solo)",
-    "GPT_gpt2":         "GPT-2\n(solo)",
-    "B2_nodejs_heavy":  "Node.js\n(solo)",
-    "A2B2_concurrent":  "YOLO+\nNode",
-    "PTB2_concurrent":  "PT+\nNode",
-    "RNB2_concurrent":  "RN+\nNode",
-    "GPTB2_concurrent": "GPT+\nNode",
-    "A2PT_concurrent":  "YOLO+\nPT",
-    "A2RN_concurrent":  "YOLO+\nRN",
-    "A2GPT_concurrent": "YOLO+\nGPT",
-    "PTRN_concurrent":  "PT+\nRN",
-    "PTGPT_concurrent": "PT+\nGPT",
-    "RNGPT_concurrent": "RN+\nGPT",
+    "A2_yolo_medium":   "YOLO",
+    "PT_pytorch_gemm":  "PyTorch",
+    "RN_resnet18":      "ResNet",
+    "GPT_gpt2":         "GPT2",
+    "B2_nodejs_heavy":  "Node.js",
+    "A2B2_concurrent":  "YOLO+\nNode.js",
+    "PTB2_concurrent":  "PyTorch+\nNode.js",
+    "RNB2_concurrent":  "ResNet+\nNode.js",
+    "GPTB2_concurrent": "GPT2+\nNode.js",
+    "A2PT_concurrent":  "YOLO+\nPyTorch",
+    "A2RN_concurrent":  "YOLO+\nResNet",
+    "A2GPT_concurrent": "YOLO+\nGPT2",
+    "PTRN_concurrent":  "PyTorch+\nResNet",
+    "PTGPT_concurrent": "PyTorch+\nGPT2",
+    "RNGPT_concurrent": "ResNet+\nGPT2",
 }
 
 # phase 배경색 (타입별)
@@ -159,7 +159,7 @@ def plot_full_timeline(host_df: pd.DataFrame, rpict_df: pd.DataFrame,
 
     if not rpict_df.empty:
         ax.scatter(rpict_df["t_min"], rpict_df["wall_power_w"],
-                   color="#8e44ad", s=6, alpha=0.7, label="Wall (RPICT)", zorder=5)
+                   color="#8e44ad", s=6, alpha=0.7, label="AC Input", zorder=5)
 
     ax.set_xlabel("Elapsed Time (min)", fontsize=11)
     ax.set_ylabel("Power (W)", fontsize=11)
@@ -180,17 +180,22 @@ def plot_full_timeline(host_df: pd.DataFrame, rpict_df: pd.DataFrame,
                 rotation=0, clip_on=True,
                 bbox=dict(boxstyle="round,pad=0.1", fc="white", ec="none", alpha=0.6))
 
-    # ── 범례 패치 (phase type color) ──
+    # ── 범례 패치 (phase type color, 교수님 피드백 반영) ──
     legend_patches = [
         mpatches.Patch(color=PHASE_COLORS["baseline"],  alpha=0.5, label="Baseline"),
-        mpatches.Patch(color=PHASE_COLORS["solo_ai"],   alpha=0.5, label="Solo AI"),
-        mpatches.Patch(color=PHASE_COLORS["solo_cpu"],  alpha=0.5, label="Solo CPU"),
-        mpatches.Patch(color=PHASE_COLORS["ai_b2"],     alpha=0.5, label="AI + Node.js"),
+        mpatches.Patch(color=PHASE_COLORS["solo_ai"],   alpha=0.5, label="AI"),
+        mpatches.Patch(color=PHASE_COLORS["solo_cpu"],  alpha=0.5, label="Non-AI"),
+        mpatches.Patch(color=PHASE_COLORS["ai_b2"],     alpha=0.5, label="AI + Non-AI"),
         mpatches.Patch(color=PHASE_COLORS["ai_ai"],     alpha=0.5, label="AI + AI"),
     ]
-    ax.legend(handles=ax.get_legend_handles_labels()[0] + legend_patches,
-              labels=ax.get_legend_handles_labels()[1] + [p.get_label() for p in legend_patches],
-              loc="upper left", fontsize=8, framealpha=0.85, ncol=2)
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(
+        handles=handles + legend_patches,
+        labels=labels + [p.get_label() for p in legend_patches],
+        loc="upper left",
+        bbox_to_anchor=(0.0, 0.88),   # legend를 아래로 내려 phase 레이블과 겹치지 않게
+        fontsize=8, framealpha=0.85, ncol=2,
+    )
 
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
