@@ -163,8 +163,7 @@ def plot_full_timeline(host_df: pd.DataFrame, rpict_df: pd.DataFrame,
 
     ax.set_xlabel("Elapsed Time (min)", fontsize=11)
     ax.set_ylabel("Power (W)", fontsize=11)
-    run_label = run_id.upper() if run_id else "Run 1"
-    ax.set_title(f"Power Consumption Timeline — Phase 3 Experiment ({run_label})", fontsize=12)
+    ax.set_title("System Power Consumption Across Workload Configurations", fontsize=12)
 
     ax.set_ylim(bottom=0)
     ax.grid(axis="y", linestyle="--", alpha=0.4)
@@ -193,7 +192,7 @@ def plot_full_timeline(host_df: pd.DataFrame, rpict_df: pd.DataFrame,
         handles=handles + legend_patches,
         labels=labels + [p.get_label() for p in legend_patches],
         loc="upper left",
-        bbox_to_anchor=(0.0, 0.88),   # legend를 아래로 내려 phase 레이블과 겹치지 않게
+        bbox_to_anchor=(0.0, 0.93),   # phase 레이블과 겹치지 않도록 조정
         fontsize=8, framealpha=0.85, ncol=2,
     )
 
