@@ -3,6 +3,15 @@ data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+reports/**/*.tsv
+reports/**/*.txt
+reports/**/*.png
+reports/**/*.pdf
+reports/**/*.jpg
+reports/**/*.jpeg
+reports/**/*.gif
+reports/**/*.svg
+reports/**/*.eps
 
 # Python
 __pycache__/
@@ -42,3 +51,6 @@ package-lock.json
 
 # OS
 .DS_Store
+
+reports/**/*.tsv
+reports/**/*.txt
