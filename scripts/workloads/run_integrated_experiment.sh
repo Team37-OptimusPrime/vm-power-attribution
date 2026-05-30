@@ -31,7 +31,7 @@ set +e
 # 기본값 설정
 # =============================================================================
 EXPERIMENT="phase3"
-RPICT_HOST="rpict.local"
+RPICT_HOST="192.168.0.3"
 RPICT_USER="pi"
 RPICT_PORT="22"
 RUN_ID=$(date +%Y%m%d_%H%M%S)
