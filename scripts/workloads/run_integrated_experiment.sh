@@ -32,7 +32,7 @@ set +e
 # =============================================================================
 EXPERIMENT="phase3"
 RPICT_HOST="192.168.0.3"
-RPICT_USER="pi"
+RPICT_USER="rainyforest23"
 RPICT_PORT="22"
 RUN_ID=$(date +%Y%m%d_%H%M%S)
 DRY_RUN=false
