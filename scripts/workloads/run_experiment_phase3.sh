@@ -51,7 +51,8 @@ REAL_USER=${SUDO_USER:-$(whoami)}
 # 설정
 ########################################
 BASE_DIR="$HOME/vm-power-attribution"
-LOG_DIR="$BASE_DIR/data/raw/alienware/phase3_fixed_run3"
+# run_integrated_experiment.sh에서 INTEGRATED_LOG_DIR을 설정하면 그것을 사용
+LOG_DIR="${INTEGRATED_LOG_DIR:-$BASE_DIR/data/raw/alienware/phase3_fixed_run3}"
 SCRIPT_DIR="$BASE_DIR/scripts/measurement"
 WORKLOAD_DIR="$BASE_DIR/scripts/workloads"
 
