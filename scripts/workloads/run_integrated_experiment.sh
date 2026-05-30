@@ -74,7 +74,7 @@ REAL_USER=${SUDO_USER:-$(whoami)}
 # =============================================================================
 # 경로 설정
 # =============================================================================
-BASE_DIR="$HOME/vm-power-attribution"
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORKLOAD_DIR="$BASE_DIR/scripts/workloads"
 MEASUREMENT_DIR="$BASE_DIR/scripts/measurement"
 
@@ -135,6 +135,7 @@ scp_from_rpict() {
     local remote_path="$1"
     local local_path="$2"
     scp -P "${RPICT_PORT}" -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+        -o BatchMode=yes -i "${SSH_KEY}" \
         "${RPICT_USER}@${RPICT_HOST}:${remote_path}" "${local_path}"
 }
 
@@ -168,7 +169,8 @@ check_rpict_connection() {
         warn "rpict에 rpict_logger.py 없음: ${RPICT_SCRIPT_REMOTE}"
         warn "로컬 스크립트를 rpict로 복사합니다..."
         ssh_rpict "mkdir -p /home/${RPICT_USER}/vm-power-attribution/scripts/measurement"
-        scp -P "${RPICT_PORT}" -o StrictHostKeyChecking=no \
+        scp -P "${RPICT_PORT}" -o StrictHostKeyChecking=no -o BatchMode=yes \
+            -i "${SSH_KEY}" \
             "${MEASUREMENT_DIR}/rpict_logger.py" \
             "${RPICT_USER}@${RPICT_HOST}:${RPICT_SCRIPT_REMOTE}"
         log "rpict_logger.py 복사 완료"
