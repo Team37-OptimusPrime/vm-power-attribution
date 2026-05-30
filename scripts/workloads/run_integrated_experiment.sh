@@ -119,7 +119,13 @@ section() { echo -e "\n${CYAN}════════════════�
 # =============================================================================
 # SSH 헬퍼
 # =============================================================================
-SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=yes -p ${RPICT_PORT}"
+# sudo로 실행 시 root가 아닌 실제 유저의 SSH 키를 사용
+REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+SSH_KEY="${REAL_HOME}/.ssh/id_ed25519"
+if [ ! -f "$SSH_KEY" ]; then
+    SSH_KEY="${REAL_HOME}/.ssh/id_rsa"
+fi
+SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=yes -p ${RPICT_PORT} -i ${SSH_KEY}"
 
 ssh_rpict() {
     ssh $SSH_OPTS "${RPICT_USER}@${RPICT_HOST}" "$@"
