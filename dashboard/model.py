@@ -242,25 +242,30 @@ def attribute_power(merged_df: pd.DataFrame, baseline_powers: dict) -> pd.DataFr
     sum_mem_frac = len(CGROUPS) * MEMORY_ALLOCATED_GB / MEMORY_TOTAL_GB  # e.g. 2*4/32 = 0.25
 
     p_other = baseline_powers.get("P_other", 0.0)
+    # baseline_w: unallocated component-level power only (p_other excluded —
+    # it's unmeasured overhead that varies with load, not a stable baseline term)
     df["baseline_w"] = (
         p_cpu_idle
         + (p_gpu_idle * (1.0 - sum_ai)).clip(lower=0.0)
         + (p_mem_idle * (1.0 - sum_mem_frac))
-        + p_other
     )
 
-    # Conservation error relative to AC measurement (rpict)
-    # If rpict column present in merged_df, use it; otherwise use RAPL+GPU as proxy
-    if "power1_w" in df.columns:
-        e_sys = df["power1_w"].fillna(0.0)
-    elif "ac_power_w" in df.columns:
-        e_sys = df["ac_power_w"].fillna(0.0)
-    else:
-        # Proxy: RAPL + GPU total + mem idle estimate
-        e_sys = rapl + gpu_total + p_mem_idle
+    # Component-level reference: what the model actually decomposes
+    # (RAPL + GPU + fixed mem — excludes PSU losses and untracked overhead)
+    e_sys_components = rapl + gpu_total + p_mem_idle
+    df["e_sys_w"] = e_sys_components
 
-    df["e_sys_w"] = e_sys
-    df["conservation_error_w"] = e_sys - total_attributed - df["baseline_w"]
+    # AC wall power (RPICT) stored separately for display only
+    if "power1_w" in df.columns:
+        df["e_sys_ac_w"] = df["power1_w"].fillna(0.0)
+    elif "ac_power_w" in df.columns:
+        df["e_sys_ac_w"] = df["ac_power_w"].fillna(0.0)
+    else:
+        df["e_sys_ac_w"] = pd.Series(0.0, index=df.index)
+
+    # Conservation error vs component reference (should be ≈ ±storage ≈ 0–3%)
+    df["conservation_error_w"] = e_sys_components - total_attributed - df["baseline_w"]
+    # P_other and PSU losses are shown separately in dashboard, not conflated with model error
 
     return df
 
@@ -289,6 +294,7 @@ def summarize_phase(attributed_df: pd.DataFrame) -> dict:
     result["total_attributed_w"] = float(attributed_df["total_attributed_w"].mean()) if "total_attributed_w" in attributed_df.columns else 0.0
     result["conservation_error_w"] = float(attributed_df["conservation_error_w"].mean()) if "conservation_error_w" in attributed_df.columns else 0.0
     result["e_sys_w"] = float(attributed_df["e_sys_w"].mean()) if "e_sys_w" in attributed_df.columns else 0.0
+    result["e_sys_ac_w"] = float(attributed_df["e_sys_ac_w"].mean()) if "e_sys_ac_w" in attributed_df.columns else 0.0
 
     # System component means for time-series tab
     for col in ["rapl_package_w", "gpu_power_w", "gpu0_power_w", "gpu1_power_w"]:

@@ -544,44 +544,37 @@ def render_tab_conservation(
             attributed = attribute_power(merged, baseline_powers)
             summary = summarize_phase(attributed)
 
+            # Component-level total (model decomposes RAPL+GPU+Mem)
+            e_sys = summary.get("e_sys_w", 0.0)          # RAPL+GPU+Mem proxy
             model_total = summary.get("total_attributed_w", 0.0) + summary.get("baseline_w", 0.0)
-            rapl = summary.get("rapl_package_w", 0.0)
-            gpu = summary.get("gpu_power_w", 0.0)
-            mem_est = baseline_powers.get("P_mem_idle", 6.4)
-            rapl_gpu = rapl + gpu + mem_est
+            conservation_err = summary.get("conservation_error_w", 0.0)
 
-            phase_labels.append(_phase_label(phase_prefix))
-            model_totals.append(model_total)
-            rapl_gpu_totals.append(rapl_gpu)
+            # Component error rate: |model - e_sys_components| / e_sys_components
+            if e_sys > 0:
+                err_pct = abs(conservation_err) / e_sys * 100.0
+            else:
+                err_pct = 0.0
 
-            # RPICT average for this phase's time window
+            # RPICT AC for reference (not used in error rate — accounts for PSU gap)
+            rpict_mean = 0.0
             if has_rpict and "timestamp" in host_df.columns:
                 host_df_ts = host_df.copy()
                 host_df_ts["timestamp"] = pd.to_datetime(host_df_ts["timestamp"], errors="coerce")
                 t_start = host_df_ts["timestamp"].min()
                 t_end = host_df_ts["timestamp"].max()
-                pw_col = None
-                for c in ["power1_w", "power_w", "ac_power_w"]:
-                    if c in rpict_df.columns:
-                        pw_col = c
-                        break
+                pw_col = next((c for c in ["power1_w", "power_w", "ac_power_w"] if c in rpict_df.columns), None)
                 ts_col_r = "timestamp" if "timestamp" in rpict_df.columns else rpict_df.columns[0]
                 rdf_win = rpict_df.copy()
                 rdf_win[ts_col_r] = pd.to_datetime(rdf_win[ts_col_r], errors="coerce")
                 rdf_win = rdf_win[(rdf_win[ts_col_r] >= t_start) & (rdf_win[ts_col_r] <= t_end)]
                 if pw_col and not rdf_win.empty:
                     rpict_mean = float(rdf_win[pw_col].mean())
-                else:
-                    rpict_mean = 0.0
-                rpict_totals.append(rpict_mean)
-                if rpict_mean > 0:
-                    err_pct = abs(model_total - rpict_mean) / rpict_mean * 100.0
-                else:
-                    err_pct = 0.0
-                errors.append(err_pct)
-            else:
-                rpict_totals.append(0.0)
-                errors.append(0.0)
+
+            phase_labels.append(_phase_label(phase_prefix))
+            model_totals.append(model_total)
+            rapl_gpu_totals.append(e_sys)
+            rpict_totals.append(rpict_mean)
+            errors.append(err_pct)
 
     if not phase_labels:
         st.error("계산할 Phase 데이터가 없습니다.")
@@ -595,15 +588,16 @@ def render_tab_conservation(
         marker_color="#4C78A8",
     ))
     fig.add_trace(go.Bar(
-        name="RAPL+GPU+메모리 추정",
+        name="컴포넌트 측정 (RAPL+GPU+Mem)",
         x=phase_labels, y=rapl_gpu_totals,
         marker_color="#54A24B",
     ))
     if has_rpict and any(v > 0 for v in rpict_totals):
         fig.add_trace(go.Bar(
-            name="AC 실측 (RPICT)",
+            name="AC 실측 (RPICT, 참고용)",
             x=phase_labels, y=rpict_totals,
             marker_color="#F58518",
+            opacity=0.6,
         ))
 
     fig.update_layout(
@@ -617,24 +611,35 @@ def render_tab_conservation(
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Error table
+    # Error table (component-level conservation)
+    st.markdown("#### 보존 오차율 (모델 귀속 합계 vs 컴포넌트 측정)")
+    err_rows: dict = {
+        "Phase": phase_labels,
+        "모델 합계 (W)": [f"{v:.1f}" for v in model_totals],
+        "컴포넌트 측정 (W)": [f"{v:.1f}" for v in rapl_gpu_totals],
+        "오차율 (%)": [f"{e:.1f}%" for e in errors],
+    }
     if has_rpict and any(v > 0 for v in rpict_totals):
-        st.markdown("#### 오차율 (모델 vs RPICT)")
-        err_data = {
-            "Phase": phase_labels,
-            "모델 합계 (W)": [f"{v:.2f}" for v in model_totals],
-            "RPICT AC (W)": [f"{v:.2f}" for v in rpict_totals],
-            "오차율 (%)": [f"{e:.1f}%" for e in errors],
-        }
-        st.dataframe(pd.DataFrame(err_data).set_index("Phase"), use_container_width=True)
+        err_rows["AC 실측-RPICT (W)"] = [f"{v:.1f}" for v in rpict_totals]
+        psu_effs = [
+            f"{rapl_gpu_totals[i]/rpict_totals[i]*100:.0f}%"
+            if rpict_totals[i] > 0 else "N/A"
+            for i in range(len(phase_labels))
+        ]
+        err_rows["PSU 효율 추정"] = psu_effs
+    st.dataframe(pd.DataFrame(err_rows).set_index("Phase"), use_container_width=True)
+
+    if has_rpict and any(v > 0 for v in rpict_totals):
+        st.caption("※ 오차율은 컴포넌트 측정(RAPL+GPU+Mem) 기준. AC 실측(RPICT)과의 차이는 PSU 효율 손실로, 모델 오차가 아닙니다.")
 
     # Metric tiles for single-phase selection
     if len(phase_labels) == 1:
         col1, col2, col3 = st.columns(3)
         col1.metric("모델 귀속 합계", f"{model_totals[0]:.1f} W")
-        col2.metric("RAPL+GPU 추정", f"{rapl_gpu_totals[0]:.1f} W")
+        col2.metric("컴포넌트 측정", f"{rapl_gpu_totals[0]:.1f} W", f"오차 {errors[0]:.1f}%")
         if has_rpict and rpict_totals[0] > 0:
-            col3.metric("AC 실측 (RPICT)", f"{rpict_totals[0]:.1f} W", f"오차 {errors[0]:.1f}%")
+            psu = rapl_gpu_totals[0] / rpict_totals[0] * 100
+            col3.metric("AC 실측 (RPICT)", f"{rpict_totals[0]:.1f} W", f"PSU 효율 {psu:.0f}%")
         else:
             col3.metric("AC 실측 (RPICT)", "N/A")
 
