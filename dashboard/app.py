@@ -136,7 +136,7 @@ def render_sidebar() -> tuple[Optional[dict], list[str], bool, bool, int]:
     runs = cached_find_run_dirs(str(BASE_DATA_DIR))
     if not runs:
         st.sidebar.error(f"데이터 디렉토리를 찾을 수 없습니다:\n{BASE_DATA_DIR}")
-        return None, [], refreshed
+        return None, [], refreshed, live_mode, interval
 
     run_names = [r["run_name"] for r in runs]
 
@@ -172,7 +172,7 @@ def render_sidebar() -> tuple[Optional[dict], list[str], bool, bool, int]:
 
     if not all_phases:
         st.sidebar.warning("해당 런에 Phase 데이터가 없습니다.")
-        return selected_run, [], refreshed
+        return selected_run, [], refreshed, live_mode, interval
 
     phase_label_map = {p: _phase_label(p) for p in all_phases}
     all_labels = list(phase_label_map.values())
