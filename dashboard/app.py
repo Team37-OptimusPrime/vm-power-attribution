@@ -247,7 +247,21 @@ def render_tab_system_power(
 
     phase_boundaries: list[tuple[float, float, str]] = []
 
+    # Determine global_t_ref as the earliest timestamp across all selected phases
     global_t_ref: Optional[pd.Timestamp] = None
+    for phase_prefix in selected_phases:
+        _pd = cached_load_phase(str(alienware_path), phase_prefix)
+        _hdf = _pd.get("host")
+        if _hdf is None or _hdf.empty:
+            continue
+        _hdf = _hdf.copy()
+        _hdf["timestamp"] = pd.to_datetime(_hdf["timestamp"], errors="coerce")
+        _hdf = _hdf.dropna(subset=["timestamp"])
+        if _hdf.empty:
+            continue
+        _t0 = _hdf["timestamp"].min()
+        if global_t_ref is None or _t0 < global_t_ref:
+            global_t_ref = _t0
 
     for idx, phase_prefix in enumerate(selected_phases):
         phase_data = cached_load_phase(str(alienware_path), phase_prefix)
@@ -262,10 +276,6 @@ def render_tab_system_power(
         if host_df.empty:
             continue
 
-        if global_t_ref is None:
-            global_t_ref = host_df["timestamp"].iloc[0]
-
-        t_ref = host_df["timestamp"].iloc[0]
         elapsed = (host_df["timestamp"] - global_t_ref).dt.total_seconds()
 
         col = color_cycle[idx % len(color_cycle)]
