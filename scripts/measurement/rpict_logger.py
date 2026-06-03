@@ -87,9 +87,9 @@ def main():
     line_count = 0
 
     try:
-        # lcl-run 실행 (shell script이므로 shell=True 사용)
+        # lcl-run 실행 (ttyAMA0 명시: GPIO 시리얼 포트)
         proc = subprocess.Popen(
-            'lcl-run',
+            'lcl-run /dev/ttyAMA0',
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
