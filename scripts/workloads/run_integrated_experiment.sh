@@ -258,6 +258,40 @@ stop_rpict_logger() {
 # =============================================================================
 # 실험 스크립트 실행 (LOG_DIR을 오버라이드)
 # =============================================================================
+# 주기적 rpict CSV 동기화 (백그라운드)
+# =============================================================================
+RPICT_SYNC_PID=""
+
+start_rpict_sync() {
+    if $SKIP_RPICT || $DRY_RUN; then return 0; fi
+
+    local interval=30  # 30초마다 동기화
+    mkdir -p "$RPICT_DATA_DIR"
+    chown "$REAL_UID:$REAL_GID" "$RPICT_DATA_DIR"
+
+    (
+        while true; do
+            sleep "$interval"
+            scp -P "${RPICT_PORT}" -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
+                -o BatchMode=yes -i "${SSH_KEY}" \
+                "${RPICT_USER}@${RPICT_HOST}:${RPICT_REMOTE_FILE}" \
+                "${RPICT_DATA_DIR}/rpict.csv" 2>/dev/null \
+                && chown "$REAL_UID:$REAL_GID" "${RPICT_DATA_DIR}/rpict.csv" 2>/dev/null \
+                || true
+        done
+    ) &
+    RPICT_SYNC_PID=$!
+    log "rpict 주기적 동기화 시작 (${interval}초 간격, PID: ${RPICT_SYNC_PID})"
+}
+
+stop_rpict_sync() {
+    if [ -n "$RPICT_SYNC_PID" ]; then
+        kill "$RPICT_SYNC_PID" 2>/dev/null
+        wait "$RPICT_SYNC_PID" 2>/dev/null
+    fi
+}
+
+# =============================================================================
 EXPERIMENT_PID=""
 
 start_experiment() {
@@ -322,6 +356,9 @@ cleanup() {
     echo ""
     warn "인터럽트 감지 — 정리 중..."
 
+    # 주기적 동기화 종료
+    stop_rpict_sync
+
     # rpict 로거 종료 및 회수
     stop_rpict_logger
 
@@ -360,11 +397,17 @@ if ! $SKIP_RPICT && ! $DRY_RUN; then
     sleep 3
 fi
 
-# 3. 실험 실행
+# 3. 주기적 동기화 시작
+start_rpict_sync
+
+# 4. 실험 실행
 start_experiment
 EXPERIMENT_EXIT=$?
 
-# 4. rpict 종료 + CSV 회수 (trap에서도 호출되지만 정상 종료 시도 먼저)
+# 5. 주기적 동기화 종료
+stop_rpict_sync
+
+# 6. rpict 종료 + CSV 최종 회수
 stop_rpict_logger
 
 # 5. 메타데이터 저장
