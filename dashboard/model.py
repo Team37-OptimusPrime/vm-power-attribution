@@ -228,8 +228,26 @@ def attribute_power(merged_df: pd.DataFrame, baseline_powers: dict) -> pd.DataFr
     total_attributed = sum(attributed_list) if attributed_list else pd.Series(0.0, index=df.index)
     df["total_attributed_w"] = total_attributed
 
-    # Baseline = CPU idle + GPU idle + mem idle
-    df["baseline_w"] = p_cpu_idle + p_gpu_idle + p_mem_idle
+    # Baseline = unallocated portions of CPU idle + GPU idle + mem idle + P_other
+    # GPU idle already partially attributed to workloads via a_i; only the remainder stays in baseline
+    sum_ai = pd.Series(0.0, index=df.index)
+    for cg in CGROUPS:
+        gpu_id = CGROUP_GPU_MAP.get(cg, "gpu0")
+        uses_gpu = (
+            (df[f"{gpu_id}_util_pct"].fillna(0.0) if f"{gpu_id}_util_pct" in df.columns else pd.Series(0.0, index=df.index))
+            > 0
+        ).astype(float)
+        sum_ai += uses_gpu / n_active_gpus
+
+    sum_mem_frac = len(CGROUPS) * MEMORY_ALLOCATED_GB / MEMORY_TOTAL_GB  # e.g. 2*4/32 = 0.25
+
+    p_other = baseline_powers.get("P_other", 0.0)
+    df["baseline_w"] = (
+        p_cpu_idle
+        + (p_gpu_idle * (1.0 - sum_ai)).clip(lower=0.0)
+        + (p_mem_idle * (1.0 - sum_mem_frac))
+        + p_other
+    )
 
     # Conservation error relative to AC measurement (rpict)
     # If rpict column present in merged_df, use it; otherwise use RAPL+GPU as proxy

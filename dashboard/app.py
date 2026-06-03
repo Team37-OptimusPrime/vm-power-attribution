@@ -5,6 +5,7 @@ Run with:  streamlit run app.py
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -84,22 +85,22 @@ COMPONENT_LABELS = {
 # Caching helpers
 # ---------------------------------------------------------------------------
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=5, show_spinner=False)
 def cached_find_run_dirs(base: str) -> list[dict]:
     return find_run_dirs(Path(base))
 
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=5, show_spinner=False)
 def cached_load_baseline(alienware_path: str) -> dict:
     return load_baseline(Path(alienware_path))
 
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=5, show_spinner=False)
 def cached_load_rpict(rpict_path: Optional[str]) -> Optional[pd.DataFrame]:
     return load_rpict(Path(rpict_path) if rpict_path else None)
 
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=5, show_spinner=False)
 def cached_load_phase(alienware_path: str, phase_prefix: str) -> dict:
     return load_phase(Path(alienware_path), phase_prefix)
 
@@ -112,10 +113,19 @@ def _phase_label(prefix: str) -> str:
 # Sidebar
 # ---------------------------------------------------------------------------
 
-def render_sidebar() -> tuple[Optional[dict], list[str], bool]:
-    """Render sidebar controls.  Returns (selected_run, selected_phases, refreshed)."""
+def render_sidebar() -> tuple[Optional[dict], list[str], bool, bool, int]:
+    """Render sidebar controls.  Returns (selected_run, selected_phases, refreshed, live_mode, interval)."""
     st.sidebar.title("⚡ VM 전력 귀속")
     st.sidebar.markdown("---")
+
+    # ------------------------------------------------------------------
+    # Live mode
+    # ------------------------------------------------------------------
+    live_mode = st.sidebar.toggle("🔴 실시간 모드", value=False, help="실험 진행 중 자동으로 새 데이터를 반영합니다.")
+    interval = 5
+    if live_mode:
+        interval = st.sidebar.slider("갱신 주기 (초)", min_value=2, max_value=30, value=5, step=1)
+        st.sidebar.caption(f"⏱ {interval}초마다 자동 갱신")
 
     refreshed = st.sidebar.button("🔄 새로고침", use_container_width=True)
     if refreshed:
@@ -129,8 +139,16 @@ def render_sidebar() -> tuple[Optional[dict], list[str], bool]:
         return None, [], refreshed
 
     run_names = [r["run_name"] for r in runs]
-    # Auto-select the most recent run (last alphabetically / last by modification time)
-    default_run_idx = len(run_names) - 1
+
+    # In live mode: pick run with most recently modified CSV
+    if live_mode:
+        def _latest_mtime(r: dict) -> float:
+            csvs = list(Path(r["alienware_path"]).glob("*.csv"))
+            return max((f.stat().st_mtime for f in csvs), default=0.0)
+        latest_run = max(runs, key=_latest_mtime)
+        default_run_idx = run_names.index(latest_run["run_name"])
+    else:
+        default_run_idx = len(run_names) - 1
 
     selected_run_name = st.sidebar.selectbox(
         "실험 런",
@@ -139,6 +157,14 @@ def render_sidebar() -> tuple[Optional[dict], list[str], bool]:
         format_func=lambda x: x,
     )
     selected_run = next(r for r in runs if r["run_name"] == selected_run_name)
+
+    # Show live indicator if a CSV was written in the last 15 s
+    if live_mode:
+        csvs = list(Path(selected_run["alienware_path"]).glob("*.csv"))
+        if csvs:
+            age = time.time() - max(f.stat().st_mtime for f in csvs)
+            if age < 15:
+                st.sidebar.success(f"● 실험 진행 중 (마지막 기록 {age:.0f}초 전)")
 
     # Phase selector
     alienware_path = selected_run["alienware_path"]
@@ -151,16 +177,18 @@ def render_sidebar() -> tuple[Optional[dict], list[str], bool]:
     phase_label_map = {p: _phase_label(p) for p in all_phases}
     all_labels = list(phase_label_map.values())
 
+    select_all = st.sidebar.checkbox("전체 선택", value=False)
+
     selected_labels = st.sidebar.multiselect(
-        "Phase 선택",
+        "워크로드(Phase) 선택",
         options=all_labels,
-        default=all_labels[:1],
+        default=all_labels if select_all else all_labels[:1],
         help="여러 Phase를 선택하면 그룹 막대 차트로 비교합니다.",
     )
 
     # Reverse mapping label → prefix
     label_to_prefix = {v: k for k, v in phase_label_map.items()}
-    selected_phases = [label_to_prefix[lbl] for lbl in selected_labels if lbl in label_to_prefix]
+    selected_phases = all_phases if select_all else [label_to_prefix[lbl] for lbl in selected_labels if lbl in label_to_prefix]
 
     if selected_run.get("rpict_path") is None:
         st.sidebar.info("ℹ️ RPICT 파일 없음 – AC 전력 측정값 미표시")
@@ -168,7 +196,7 @@ def render_sidebar() -> tuple[Optional[dict], list[str], bool]:
     st.sidebar.markdown("---")
     st.sidebar.caption(f"데이터 경로: `{BASE_DATA_DIR}`")
 
-    return selected_run, selected_phases, refreshed
+    return selected_run, selected_phases, refreshed, live_mode, interval
 
 
 # ---------------------------------------------------------------------------
@@ -268,9 +296,11 @@ def render_tab_system_power(
             x1 = float(elapsed.iloc[-1])
             phase_boundaries.append((x0, x1, lbl))
 
-    # Overlay rpict for the time window of the first selected phase
-    if global_t_ref is not None and rpict_df is not None:
-        _add_rpict_to_fig(fig, rpict_df, global_t_ref)
+    # Overlay rpict only if valid (mean >= 10W)
+    if global_t_ref is not None and rpict_df is not None and not rpict_df.empty:
+        _pw = next((c for c in ["power1_w", "power_w", "ac_power_w"] if c in rpict_df.columns), None)
+        if _pw and float(rpict_df[_pw].mean()) >= 10.0:
+            _add_rpict_to_fig(fig, rpict_df, global_t_ref)
 
     # Shading
     for x0, x1, lbl in phase_boundaries:
@@ -472,8 +502,17 @@ def render_tab_conservation(
     rpict_path = selected_run.get("rpict_path")
     rpict_df = cached_load_rpict(str(rpict_path) if rpict_path else None)
 
-    has_rpict = rpict_df is not None and not rpict_df.empty
-    if not has_rpict:
+    # RPICT 유효성 검사: 평균 10W 미만이면 센서 미연결로 간주
+    _rpict_valid = False
+    if rpict_df is not None and not rpict_df.empty:
+        for _c in ["power1_w", "power_w", "ac_power_w"]:
+            if _c in rpict_df.columns and float(rpict_df[_c].mean()) >= 10.0:
+                _rpict_valid = True
+                break
+    has_rpict = _rpict_valid
+    if rpict_df is not None and not rpict_df.empty and not has_rpict:
+        st.warning("⚠️ RPICT 데이터가 10W 미만입니다 — CT 클램프 미연결로 판단하여 AC 측정값을 제외합니다.")
+    elif rpict_df is None or rpict_df.empty:
         st.warning("RPICT 파일이 없어 AC 측정값을 표시하지 않습니다.")
 
     phase_labels: list[str] = []
@@ -595,7 +634,7 @@ def render_tab_conservation(
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    selected_run, selected_phases, _ = render_sidebar()
+    selected_run, selected_phases, _, live_mode, interval = render_sidebar()
 
     if selected_run is None:
         st.title("⚡ VM 전력 귀속 대시보드")
@@ -604,7 +643,12 @@ def main() -> None:
         return
 
     run_name = selected_run["run_name"]
-    st.title(f"⚡ VM 전력 귀속 대시보드 — `{run_name}`")
+    title_col, status_col = st.columns([4, 1])
+    with title_col:
+        st.title(f"⚡ VM 전력 귀속 대시보드 — `{run_name}`")
+    with status_col:
+        if live_mode:
+            st.markdown("<br><span style='color:red; font-size:1.1em;'>● LIVE</span>", unsafe_allow_html=True)
 
     alienware_path = selected_run["alienware_path"]
 
@@ -634,6 +678,14 @@ def main() -> None:
 
     with tab3:
         render_tab_conservation(selected_run, selected_phases, baseline_powers)
+
+    # ------------------------------------------------------------------
+    # Live mode: sleep then rerun
+    # ------------------------------------------------------------------
+    if live_mode:
+        time.sleep(interval)
+        st.cache_data.clear()
+        st.rerun()
 
 
 if __name__ == "__main__":
