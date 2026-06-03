@@ -84,6 +84,7 @@ declare -A EXPERIMENT_SCRIPTS=(
     ["phase3_nopt"]="run_experiment_phase3_nopt.sh"
     ["asymmetric"]="run_experiment_asymmetric.sh"
     ["3way"]="run_experiment_3way.sh"
+    ["quicktest"]="run_experiment_quicktest.sh"
 )
 
 EXPERIMENT_SCRIPT="${EXPERIMENT_SCRIPTS[$EXPERIMENT]}"
