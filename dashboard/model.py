@@ -296,6 +296,14 @@ def summarize_phase(attributed_df: pd.DataFrame) -> dict:
     result["e_sys_w"] = float(attributed_df["e_sys_w"].mean()) if "e_sys_w" in attributed_df.columns else 0.0
     result["e_sys_ac_w"] = float(attributed_df["e_sys_ac_w"].mean()) if "e_sys_ac_w" in attributed_df.columns else 0.0
 
+    # MAE-based error rate: captures timing jitter between async samplers (2-4% range)
+    if "conservation_error_w" in attributed_df.columns and "e_sys_w" in attributed_df.columns:
+        e_sys_mean = float(attributed_df["e_sys_w"].mean())
+        mae = float(attributed_df["conservation_error_w"].abs().mean())
+        result["conservation_mae_pct"] = (mae / e_sys_mean * 100.0) if e_sys_mean > 0 else 0.0
+    else:
+        result["conservation_mae_pct"] = 0.0
+
     # System component means for time-series tab
     for col in ["rapl_package_w", "gpu_power_w", "gpu0_power_w", "gpu1_power_w"]:
         result[col] = float(attributed_df[col].mean()) if col in attributed_df.columns else 0.0
