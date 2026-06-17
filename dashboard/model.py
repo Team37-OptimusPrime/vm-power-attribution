@@ -145,7 +145,6 @@ def attribute_power(merged_df: pd.DataFrame, baseline_powers: dict) -> pd.DataFr
     df = merged_df.copy()
 
     p_cpu_idle = baseline_powers.get("P_cpu_idle", 0.0)
-    p_gpu_idle = baseline_powers.get("P_gpu_idle", 0.0)
     p_mem_idle = baseline_powers.get("P_mem_idle", P_MEM_IDLE)
 
     # ------------------------------------------------------------------
@@ -163,22 +162,19 @@ def attribute_power(merged_df: pd.DataFrame, baseline_powers: dict) -> pd.DataFr
     cpu_sum = cpu_sum.clip(lower=1.0)   # avoid division by zero
 
     # ------------------------------------------------------------------
-    # GPU attribution
+    # GPU attribution — PHYSICAL per-GPU assignment (canonical paper model)
+    # Each cgroup owns one physical GPU (yolo.slice→gpu0, nodejs.slice→gpu1);
+    # that GPU's measured power (including its idle floor) is attributed wholly
+    # to its owner.  Reading per-GPU power directly is robust to bursty
+    # utilisation — unlike splitting pooled power by instantaneous util ratio,
+    # which mis-attributes when util momentarily drops to 0 while power stays
+    # high (the cause of the prior ~11% conservation error on bursty YOLO).
     # ------------------------------------------------------------------
     gpu_total = df["gpu_power_w"].fillna(0.0) if "gpu_power_w" in df.columns else pd.Series(0.0, index=df.index)
-    p_gpu_act = (gpu_total - p_gpu_idle).clip(lower=0.0)
 
-    # Number of active GPUs (util > 0) – used for idle GPU sharing
-    def _gpu_util_series(gpu_id: str) -> pd.Series:
-        col = f"{gpu_id}_util_pct"
+    def _gpu_power_series(gpu_id: str) -> pd.Series:
+        col = f"{gpu_id}_power_w"
         return df[col].fillna(0.0) if col in df.columns else pd.Series(0.0, index=df.index)
-
-    gpu0_util = _gpu_util_series("gpu0")
-    gpu1_util = _gpu_util_series("gpu1")
-    n_active_gpus = ((gpu0_util > 0).astype(float) + (gpu1_util > 0).astype(float)).clip(lower=1.0)
-
-    # GPU utilisation sum across assigned cgroups
-    gpu_util_sum = (gpu0_util + gpu1_util).clip(lower=1.0)
 
     # ------------------------------------------------------------------
     # Iterate over cgroups
@@ -194,14 +190,8 @@ def attribute_power(merged_df: pd.DataFrame, baseline_powers: dict) -> pd.DataFr
         # CPU share
         p_wi_cpu = p_cpu_active * (cpu_pct / cpu_sum)
 
-        # GPU share
-        # Idle portion: proportional allocation among active GPUs
-        uses_gpu = (_gpu_util_series(gpu_id) > 0).astype(float)
-        a_i = uses_gpu / n_active_gpus
-
-        # Active portion: proportional to the workload's assigned GPU utilisation
-        gpu_util_i = _gpu_util_series(gpu_id)
-        p_wi_gpu = p_gpu_idle * a_i + p_gpu_act * (gpu_util_i / gpu_util_sum)
+        # GPU share — wholly the workload's assigned physical GPU power
+        p_wi_gpu = _gpu_power_series(gpu_id)
 
         # Memory share (allocation-based, fixed)
         p_wi_mem = pd.Series(p_mem_idle * (MEMORY_ALLOCATED_GB / MEMORY_TOTAL_GB), index=df.index)
@@ -228,27 +218,11 @@ def attribute_power(merged_df: pd.DataFrame, baseline_powers: dict) -> pd.DataFr
     total_attributed = sum(attributed_list) if attributed_list else pd.Series(0.0, index=df.index)
     df["total_attributed_w"] = total_attributed
 
-    # Baseline = unallocated portions of CPU idle + GPU idle + mem idle + P_other
-    # GPU idle already partially attributed to workloads via a_i; only the remainder stays in baseline
-    sum_ai = pd.Series(0.0, index=df.index)
-    for cg in CGROUPS:
-        gpu_id = CGROUP_GPU_MAP.get(cg, "gpu0")
-        uses_gpu = (
-            (df[f"{gpu_id}_util_pct"].fillna(0.0) if f"{gpu_id}_util_pct" in df.columns else pd.Series(0.0, index=df.index))
-            > 0
-        ).astype(float)
-        sum_ai += uses_gpu / n_active_gpus
-
+    # Baseline = unallocated component power.
+    # GPU: every physical-GPU watt is attributed to its owner cgroup → no GPU term.
+    # CPU: the RAPL idle floor.  Memory: the unallocated-capacity share of idle DRAM.
     sum_mem_frac = len(CGROUPS) * MEMORY_ALLOCATED_GB / MEMORY_TOTAL_GB  # e.g. 2*4/32 = 0.25
-
-    p_other = baseline_powers.get("P_other", 0.0)
-    # baseline_w: unallocated component-level power only (p_other excluded —
-    # it's unmeasured overhead that varies with load, not a stable baseline term)
-    df["baseline_w"] = (
-        p_cpu_idle
-        + (p_gpu_idle * (1.0 - sum_ai)).clip(lower=0.0)
-        + (p_mem_idle * (1.0 - sum_mem_frac))
-    )
+    df["baseline_w"] = p_cpu_idle + (p_mem_idle * (1.0 - sum_mem_frac))
 
     # Component-level reference: what the model actually decomposes
     # (RAPL + GPU + fixed mem — excludes PSU losses and untracked overhead)
@@ -268,6 +242,42 @@ def attribute_power(merged_df: pd.DataFrame, baseline_powers: dict) -> pd.DataFr
     # P_other and PSU losses are shown separately in dashboard, not conflated with model error
 
     return df
+
+
+# ---------------------------------------------------------------------------
+# Utilization-only baseline (naive cloud billing)
+# ---------------------------------------------------------------------------
+
+def utilization_only_split(attributed_df: pd.DataFrame) -> dict:
+    """Naive utilisation-based attribution for the 3-way comparison.
+
+    Splits the SAME total attributed power as :func:`attribute_power`, but purely
+    by each workload's CPU utilisation share — the way allocation/utilisation
+    based cloud billing works.  It ignores component heterogeneity (a GPU watt
+    and a CPU watt are treated identically), so GPU-heavy workloads are
+    systematically under-charged and CPU-heavy co-runners over-charged.
+
+    Returns a dict ``{safe_cgroup_name -> mean utilisation-only power (W)}``.
+    """
+    if attributed_df is None or attributed_df.empty:
+        return {SAFE[cg]: 0.0 for cg in CGROUPS}
+
+    df = attributed_df
+    total = df["total_attributed_w"].fillna(0.0) if "total_attributed_w" in df.columns else pd.Series(0.0, index=df.index)
+
+    cpu_sum = sum(
+        df[f"{SAFE[cg]}_cpu_percent"].fillna(0.0)
+        for cg in CGROUPS
+        if f"{SAFE[cg]}_cpu_percent" in df.columns
+    )
+    cpu_sum = cpu_sum.clip(lower=1.0)
+
+    result: dict = {}
+    for cg in CGROUPS:
+        safe = SAFE[cg]
+        cpu_pct = df[f"{safe}_cpu_percent"].fillna(0.0) if f"{safe}_cpu_percent" in df.columns else pd.Series(0.0, index=df.index)
+        result[safe] = float((total * (cpu_pct / cpu_sum)).mean())
+    return result
 
 
 # ---------------------------------------------------------------------------
