@@ -14,19 +14,19 @@ MEMORY_POWER = 6.4
 STORAGE_FACTOR = 0.0025 # W / (MB/s)
 
 def load_rpict():
-    # Load both phase3.csv and phase3-rerun.csv
+    # Load phase3.csv, optionally concatenating a second run if present.
     f1 = os.path.join(RPICT_DIR, "phase3.csv")
-    f2 = os.path.join(RPICT_DIR, "phase3-rerun.csv")
-    
-    df1 = pd.read_csv(f1)
-    df2 = pd.read_csv(f2)
-    
-    # Parse dates
-    df1['timestamp'] = pd.to_datetime(df1['timestamp'])
-    df2['timestamp'] = pd.to_datetime(df2['timestamp'])
-    
-    # Concatenate and sort
-    df = pd.concat([df1, df2]).sort_values('timestamp').drop_duplicates('timestamp')
+    frames = [pd.read_csv(f1)]
+    for extra in ("phase3-rerun.csv", "phase3-run2.csv"):
+        f2 = os.path.join(RPICT_DIR, extra)
+        if os.path.exists(f2):
+            frames.append(pd.read_csv(f2))
+
+    df = pd.concat(frames, ignore_index=True)
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+    # Sort and de-duplicate on timestamp
+    df = df.sort_values('timestamp').drop_duplicates('timestamp')
     return df
 
 def process_phase_verification(host_csv, rpict_df):

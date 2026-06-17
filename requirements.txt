@@ -8,8 +8,9 @@ pandas>=2.0.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
 
-# Machine Learning
+# Machine Learning / statistics
 scikit-learn>=1.3.0
+scipy>=1.10.0
 
 # System monitoring
 psutil>=5.9.0
