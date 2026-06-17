@@ -1,0 +1,573 @@
+Running scope as unit: run-r5fb08ad0e808422d94371f25350171aa.scope
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist
+Ultralytics 8.4.57 🚀 Python-3.10.12 torch-2.12.0+cu130 CUDA:0 (NVIDIA GeForce RTX 3060, 11876MiB)
+YOLOv8m summary (fused): 92 layers, 25,886,080 parameters, 0 gradients, 78.9 GFLOPs
+Traceback (most recent call last):
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/bin/yolo", line 8, in <module>
+    sys.exit(entrypoint())
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/cfg/__init__.py", line 1038, in entrypoint
+    getattr(model, mode)(**overrides)  # default args from model
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/model.py", line 537, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 247, in predict_cli
+    for _ in gen:  # sourcery skip: remove-empty-nested-block, noqa
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 40, in generator_context
+    response = gen.send(None)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 302, in stream_inference
+    self.setup_source(source if source is not None else self.args.source)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/engine/predictor.py", line 259, in setup_source
+    self.dataset = load_inference_source(
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/build.py", line 456, in load_inference_source
+    dataset = LoadImagesAndVideos(source, batch=batch, vid_stride=vid_stride, channels=channels)
+  File "/home/rainyforest23/Desktop/vm-power-attribution/scripts/workloads/yolo_venv/lib/python3.10/site-packages/ultralytics/data/loaders.py", line 368, in __init__
+    raise FileNotFoundError(f"{p} does not exist")
+FileNotFoundError: test_video.mp4 does not exist

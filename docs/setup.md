@@ -16,7 +16,7 @@
 | Storage | NVMe SSD | |
 | Network | Onboard + Intel I350-T2 | PTP 지원 |
 | IP | 192.168.0.66 (static) | |
-| SSH | Port 10022 (외부) | DDNS: rainyforest23-lab.iptime.org |
+| SSH | 내부 포트 22 (외부 접속은 라우터 포트포워딩) | |
 
 ### 1.2 Power Measurement System (RPICT4V3)
 
@@ -157,7 +157,7 @@ pynvml
 ```bash
 # /etc/ssh/sshd_config
 Port 22  # 내부용
-# 외부 접속은 라우터에서 10022 → 22 포트포워딩
+# 외부 접속은 라우터에서 <외부포트> → 22 포트포워딩
 
 # 키 기반 인증 설정 (권장)
 ssh-keygen -t ed25519
@@ -375,7 +375,7 @@ sudo phc2sys -s /dev/ptp0 -w
 ### 네트워크
 
 - [ ] Host ↔ Raspberry Pi ping 가능
-- [ ] 외부에서 SSH 접속 가능 (포트 10022)
+- [ ] 외부에서 SSH 접속 가능 (라우터 포트포워딩)
 - [ ] VM에서 인터넷 접속 가능
 
 ### 시간 동기화

@@ -1,0 +1,69 @@
+Phase 2 Experiment Data — 2026-02-16
+=================================================================
+
+1. Component Isolation: Config A~D Idle Power
+-----------------------------------------------------------------
+  Config                Wall(RPICT)       RAPL        GPU     GPU0     GPU1
+  A (2GPU+2DIMM)    44.51 W    3.50 W   12.67 W   6.75   5.92
+  B (2GPU+1DIMM)    44.82 W    3.56 W   13.60 W   7.13   6.46
+  C (1GPU+1DIMM)    31.40 W    2.71 W    7.31 W   7.31      -
+  D (1GPU+2DIMM)    30.75 W    2.56 W    6.99 W   6.99      -
+
+  Per-run:
+    A_run1:  RAPL=3.55  GPU=12.55  GPU0=6.62  GPU1=5.93
+    A_run2:  RAPL=3.58  GPU=12.95  GPU0=7.03  GPU1=5.92
+    A_run3:  RAPL=3.37  GPU=12.50  GPU0=6.59  GPU1=5.91
+    B_run1:  RAPL=3.67  GPU=14.29  GPU0=7.80  GPU1=6.48
+    B_run2:  RAPL=3.54  GPU=13.38  GPU0=6.91  GPU1=6.47
+    B_run3:  RAPL=3.45  GPU=13.12  GPU0=6.68  GPU1=6.44
+    C_run1:  RAPL=2.85  GPU=8.07  GPU0=8.07  GPU1= -
+    C_run2:  RAPL=2.64  GPU=6.96  GPU0=6.96  GPU1= -
+    C_run3:  RAPL=2.64  GPU=6.91  GPU0=6.91  GPU1= -
+    D_run1:  RAPL=2.64  GPU=7.10  GPU0=7.10  GPU1= -
+    D_run2:  RAPL=2.58  GPU=6.98  GPU0=6.98  GPU1= -
+    D_run3:  RAPL=2.45  GPU=6.90  GPU0=6.90  GPU1= -
+
+2. Cross-Validation
+-----------------------------------------------------------------
+  GPU wall/card:   B-C = +13.42W   A-D = +13.75W   avg = 13.58W
+  GPU sensor/card: B-C = +6.28W   A-D = +5.67W   avg = 5.98W
+  GPU hidden:      13.58 - 5.98 = 7.61 W/card
+  Memory/DIMM:     A-B = +0.68W   D-C = -0.18W   avg = 0.25W
+  Superposition:   pred 45.24W  meas 44.51W  err 0.73W (1.6%)
+  Closure(A-B-D+C): +0.34W
+
+3. fio Storage (Samsung 980 500GB, bs=1M iodepth=32 direct=1 60s)
+-----------------------------------------------------------------
+  CPU: no_turbo=1, powersave, 3600MHz
+
+  Phase             Wall(RPICT)         RAPL pkg        GPU
+  Idle          44.31 +/- 2.0 W    3.29 +/- 0.43 W   13.10 W
+  seq_write     56.49 +/- 3.1 W   10.19 +/- 1.81 W   12.83 W
+  seq_read      60.98 +/- 4.0 W   11.90 +/- 2.22 W   12.84 W
+
+  fio results:
+    seq_write: 2266 MB/s  IOPS=2266  lat=14.1ms  IO=143GB  disk_util=99.9%
+    seq_read:  3002 MB/s  IOPS=3002  lat=10.7ms  IO=189GB  disk_util=99.9%
+
+  Storage = dWall - dCPU - dGPU:
+                              seq_write   seq_read
+  dWall                        +12.19 W   +16.68 W
+  dCPU                          +6.90 W    +8.61 W
+  dGPU                          -0.28 W    -0.27 W
+  Storage (AC wall)              5.56 W     8.33 W
+  Storage (DC @78%)              4.34 W     6.50 W
+  Throughput                   2266 MB/s   3002 MB/s
+  Rate (AC)                    0.0025     0.0028 W/(MB/s)
+  Samsung 980 datasheet active: 3.9W
+
+4. Others Decomposition (Config A = 44.51W)
+-----------------------------------------------------------------
+  Before: CPU 3.50 + GPU 12.67 + Others 28.35 (64%)
+  After:
+    CPU (RAPL)               3.50 W    7.9%
+    GPU chip x2             12.67 W   28.5%
+    GPU hidden x2           15.21 W   34.2%
+    Memory (2 DIMM)          0.25 W    0.6%
+    PSU loss (~22%)          9.79 W   22.0%
+    Residual                 3.06 W    6.9%
+  Resolution: 89%

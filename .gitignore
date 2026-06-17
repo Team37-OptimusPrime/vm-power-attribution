@@ -1,56 +1,55 @@
-# Data files
-data/raw/*
-data/processed/*
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-reports/**/*.tsv
-reports/**/*.txt
-reports/**/*.png
-reports/**/*.pdf
-reports/**/*.jpg
-reports/**/*.jpeg
-reports/**/*.gif
-reports/**/*.svg
-reports/**/*.eps
+# =============================================================================
+# .gitignore — VM Power Attribution (research track)
+#
+# NOTE: This is a *research-track* project. Experiment data and results are
+# intentionally TRACKED so that reviewers can reproduce the paper's figures by
+# cloning the repository (see README "Reproducing the Paper"). Only virtual
+# environments, caches, OS junk, and exploratory (non-paper) runs are ignored.
+# =============================================================================
 
-# Python
+# --- Python / environments -------------------------------------------------
 __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
 .ipynb_checkpoints/
-
-# Logs
-*.log
-
-# CSV data files (anywhere in repo)
-*.csv
-
-# Virtual environment
 venv/
 .venv/
 *_venv/
 
-# Node.js
+# --- Node.js ---------------------------------------------------------------
 node_modules/
 package-lock.json
 
-# Test data / large files
+# --- OS junk ---------------------------------------------------------------
+.DS_Store
+
+# --- Large media (demo videos are submitted separately, not via git) -------
 *.mp4
 *.avi
 *.mkv
 
-# Images and documents (add manually when needed with git add -f)
-*.png
-*.pdf
-*.jpg
-*.jpeg
-*.gif
-*.svg
-*.eps
+# --- Internal team artifacts (not part of the deliverable) -----------------
+logs/
+reports/**/email_*
+reports/**/qa_prep_notes.md
+docs/reports/
 
-# OS
-.DS_Store
-
-reports/**/*.tsv
-reports/**/*.txt
+# --- Exploratory / non-paper experiment runs -------------------------------
+# These early phases predate the final model and are excluded to keep the
+# repository focused on the data that backs the paper.
+data/raw/alienware/phase1/
+data/raw/alienware/phase1.5/
+data/raw/alienware/phase1.5_heavy_nodejs/
+data/raw/alienware/phase1.6_test2/
+data/raw/alienware/phase2.2_fixed/
+data/raw/alienware/phase2.2_free/
+data/raw/phase1.5_merged/
+data/raw/rpict/rpict_phase1_test1.csv
+data/raw/rpict/rpict_phase1.5*.csv
+data/raw/rpict/phase2.2.csv
+reports/phase1/
+reports/phase1.5/
+reports/phase1.5_heavy/
+reports/phase1.6/
+reports/phase2.2/

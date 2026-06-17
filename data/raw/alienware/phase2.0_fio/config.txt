@@ -1,0 +1,46 @@
+Experiment: fio Storage Energy Measurement
+Date: 2026. 02. 10. (화) 12:09:29 KST
+Test Name: fio_20260210_120929
+
+Storage:
+NAME      SIZE MODEL                 ROTA
+loop0       4K                          0
+loop1    55.5M                          0
+loop2    55.5M                          0
+loop3    63.8M                          0
+loop4    63.8M                          0
+loop5      74M                          0
+loop6      74M                          0
+loop7    66.8M                          0
+loop8    66.9M                          0
+loop9   250.1M                          0
+loop10  250.4M                          0
+loop11  349.7M                          0
+loop12  241.4M                          0
+loop13  516.2M                          0
+loop14  531.4M                          0
+loop15  618.3M                          0
+loop16  606.1M                          0
+loop17    2.5M                          0
+loop18    1.7M                          0
+loop19   65.1M                          0
+loop20   91.7M                          0
+loop21    395M                          0
+loop22    576K                          0
+loop23  290.8M                          0
+loop24   50.9M                          0
+loop25   48.1M                          0
+loop26    576K                          0
+nvme0n1 465.8G Samsung SSD 980 500GB    0
+
+fio Settings:
+  File: /tmp/fio_test
+  Size: 4G
+  Duration per test: 60s
+
+Tests:
+  1. idle_baseline  - No IO
+  2. seq_read       - Sequential Read  (bs=1M, iodepth=32)
+  3. seq_write      - Sequential Write (bs=1M, iodepth=32)
+  4. rand_read      - Random Read      (bs=4K, iodepth=32)
+  5. rand_write     - Random Write     (bs=4K, iodepth=32)
