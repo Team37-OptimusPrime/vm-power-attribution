@@ -1,3 +1,5 @@
+**English** | [한국어](README.ko.md)
+
 # An Energy Cost Model for AI Workloads under Shared Resource Environments
 
 Source code, experiment data, and results for the research-track capstone
