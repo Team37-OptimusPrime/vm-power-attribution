@@ -1,0 +1,17 @@
+round	experiment	type	concurrent_type	workload	co_workload	cgroup	cpu_util_pct	gpu_util_pct	gpu_power_W	gpu0_util_pct	gpu0_power_W	gpu1_util_pct	gpu1_power_W	cpu_alloc_cores	gpu_alloc	gpu_alloc_cards	mem_alloc_GB	mem_used_MB	io_read_MB	io_write_MB	io_total_MB	duration_s
+fixed	A2_yolo_medium	solo	-	A2(YOLO_Medium)	-	yolo.slice	101.1	37.0	60.56	37.0	60.56	0.0	13.33	2	GPU0	1	4.0	1794.5	0.0	0.0	0.0	67.9
+fixed	RN_resnet18	solo	-	RN(ResNet18)	-	yolo.slice	100.0	100.0	138.70	100.0	138.70	0.0	12.80	2	GPU0	1	4.0	1280.7	0.0	0.0	0.0	68.0
+fixed	GPT_gpt2	solo	-	GPT(GPT-2)	-	yolo.slice	100.1	39.1	54.96	39.1	54.96	0.0	12.71	2	GPU0	1	4.0	2195.4	0.0	0.0	0.0	67.9
+fixed	B2_nodejs_heavy	solo	-	B2(Node_Heavy)	-	nodejs.slice	0.0	0.0	12.41	0.0	12.09	0.0	12.41	2	GPU1(idle)	0	4.0	0.1	0.0	0.0	0.0	69.4
+fixed	A2B2_concurrent	concurrent	ai_b2	A2(YOLO_Medium)	B2(Node_Heavy)	yolo.slice	100.7	34.9	57.32	34.9	57.32	0.0	12.50	2	GPU0	1	4.0	1777.8	0.0	0.0	0.0	68.6
+fixed	A2B2_concurrent	concurrent	ai_b2	B2(Node_Heavy)	A2(YOLO_Medium)	nodejs.slice	0.0	0.0	12.50	34.9	57.32	0.0	12.50	2	GPU1(idle)	0	4.0	0.1	0.0	0.0	0.0	68.6
+fixed	RNB2_concurrent	concurrent	ai_b2	RN(ResNet18)	B2(Node_Heavy)	yolo.slice	100.0	99.0	137.50	99.0	137.50	0.0	12.54	2	GPU0	1	4.0	1279.4	0.0	0.0	0.0	67.7
+fixed	RNB2_concurrent	concurrent	ai_b2	B2(Node_Heavy)	RN(ResNet18)	nodejs.slice	0.0	0.0	12.54	99.0	137.50	0.0	12.54	2	GPU1(idle)	0	4.0	0.1	0.0	0.0	0.0	67.7
+fixed	GPTB2_concurrent	concurrent	ai_b2	GPT(GPT-2)	B2(Node_Heavy)	yolo.slice	100.0	36.8	53.27	36.8	53.27	0.0	12.34	2	GPU0	1	4.0	2197.3	0.0	0.0	0.0	68.9
+fixed	GPTB2_concurrent	concurrent	ai_b2	B2(Node_Heavy)	GPT(GPT-2)	nodejs.slice	0.0	0.0	12.34	36.8	53.27	0.0	12.34	2	GPU1(idle)	0	4.0	0.1	0.0	0.0	0.0	68.9
+fixed	A2RN_concurrent	concurrent	ai_ai	A2(YOLO_Medium)	RN(ResNet18)	yolo.slice	100.8	38.1	60.56	38.1	60.56	99.8	160.88	2	GPU0	1	4.0	1350.6	0.0	0.0	0.0	68.0
+fixed	A2RN_concurrent	concurrent	ai_ai	RN(ResNet18)	A2(YOLO_Medium)	nodejs.slice	100.1	99.8	160.88	38.1	60.56	99.8	160.88	2	GPU1	1	4.0	1086.8	0.0	0.0	0.0	68.0
+fixed	A2GPT_concurrent	concurrent	ai_ai	A2(YOLO_Medium)	GPT(GPT-2)	yolo.slice	100.9	36.9	60.27	36.9	60.27	39.0	75.30	2	GPU0	1	4.0	1518.8	0.0	0.0	0.0	68.0
+fixed	A2GPT_concurrent	concurrent	ai_ai	GPT(GPT-2)	A2(YOLO_Medium)	nodejs.slice	100.1	39.0	75.30	36.9	60.27	39.0	75.30	2	GPU1	1	4.0	1872.4	0.0	0.0	0.0	68.0
+fixed	RNGPT_concurrent	concurrent	ai_ai	RN(ResNet18)	GPT(GPT-2)	yolo.slice	100.1	100.0	140.05	100.0	140.05	38.4	77.49	2	GPU0	1	4.0	1070.7	0.0	0.0	0.0	68.0
+fixed	RNGPT_concurrent	concurrent	ai_ai	GPT(GPT-2)	RN(ResNet18)	nodejs.slice	100.0	38.4	77.49	100.0	140.05	38.4	77.49	2	GPU1	1	4.0	1860.7	0.0	0.0	0.0	68.0

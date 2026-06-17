@@ -1,0 +1,4 @@
+Running scope as unit: run-r0b4a2a8e9cd34215b2144a34488dd706.scope
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[GPT-2] Loading model on cuda:0
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 5332.46it/s]

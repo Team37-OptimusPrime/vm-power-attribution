@@ -1,0 +1,4 @@
+phase	wall_W	cpu_W	gpu_W	dWall_W	dCPU_W	dGPU_W	storage_power_W	throughput_MBps	rate_W_per_MBps	energy_J_per_GB
+idle	44.31	3.29	13.10	-	-	-	-	-	-	-
+seq_write	56.49	10.19	12.83	12.18	6.90	-0.27	5.55	2266	0.0025	2.5
+seq_read	60.98	11.90	12.84	16.67	8.61	-0.26	8.32	3002	0.0028	2.8
