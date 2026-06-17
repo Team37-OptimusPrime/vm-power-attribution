@@ -78,6 +78,8 @@ vm-power-attribution/
 │
 ├── analysis/                  # standalone verification / cross-run comparison
 │
+├── legacy/                    # exploratory pre-paper scripts (data not shipped; see legacy/README.md)
+│
 ├── dashboard/                 # interactive demo (Streamlit) of the model
 │   ├── app.py                  # dashboard UI
 │   ├── model.py                # reference implementation of the energy model
