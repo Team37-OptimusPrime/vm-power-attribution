@@ -11,7 +11,7 @@ from pathlib import Path
 from datetime import datetime
 
 # Paths
-BASE_DIR = Path("/Users/rainyforest/Desktop/Univ./Ewha/2025-2026 Capstone PJT/vm-power-attribution")
+BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = BASE_DIR / "data/raw/alienware/phase1.6_test2"
 RPICT_FILE = BASE_DIR / "data/raw/rpict/rpict_phase1.5-test4.csv"
 OUTPUT_DIR = BASE_DIR / "reports/phase1.6/figures"

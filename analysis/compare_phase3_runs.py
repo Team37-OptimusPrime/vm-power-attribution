@@ -2,7 +2,7 @@
 import pandas as pd
 import os
 
-BASE = "/Users/rainyforest/Desktop/Univ./Ewha/2025-2026 Capstone PJT/vm-power-attribution"
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUN1_FILE = os.path.join(BASE, "reports/phase3/system_power.tsv")
 RUN2_FILE = os.path.join(BASE, "reports/phase3_run2/system_power_run2.tsv")
 

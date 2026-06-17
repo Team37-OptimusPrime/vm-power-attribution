@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timedelta
 
 # Configuration
-BASE_DIR = "/Users/rainyforest/Desktop/Univ./Ewha/2025-2026 Capstone PJT/vm-power-attribution"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data/raw/alienware")
 RPICT_FILE = os.path.join(BASE_DIR, "data/raw/rpict/phase2.2.csv")
 OUTPUT_DIR = os.path.join(BASE_DIR, "reports/phase2.2")

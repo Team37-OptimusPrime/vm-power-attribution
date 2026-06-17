@@ -21,7 +21,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Configuration
-BASE_DIR = Path("/Users/rainyforest/Desktop/Univ./Ewha/2025-2026 Capstone PJT/vm-power-attribution")
+BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = BASE_DIR / "data/raw/alienware/phase1.5_test2"
 RPICT_FILE = BASE_DIR / "data/raw/rpict/rpict_phase1.5-test2.csv"
 OUTPUT_DIR = BASE_DIR / "results/phase1.5"

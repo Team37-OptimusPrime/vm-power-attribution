@@ -23,7 +23,7 @@ warnings.filterwarnings('ignore')
 # ──────────────────────────────────────────────
 # Paths
 # ──────────────────────────────────────────────
-BASE_DIR = Path("/Users/rainyforest/Desktop/Univ./Ewha/2025-2026 Capstone PJT/vm-power-attribution")
+BASE_DIR = Path(__file__).resolve().parents[2]
 FIXED_DIR = BASE_DIR / "data/raw/alienware/phase2.2_fixed"
 FREE_DIR  = BASE_DIR / "data/raw/alienware/phase2.2_free"
 RPICT_FILE = BASE_DIR / "data/raw/rpict/phase2.2.csv"

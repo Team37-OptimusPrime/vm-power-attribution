@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
-BASE_DIR = Path("/Users/rainyforest/Desktop/Univ./Ewha/2025-2026 Capstone PJT/vm-power-attribution")
+BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = BASE_DIR / "data/raw/alienware/phase2.0_dimm"
 RPICT_DIR = BASE_DIR / "data/raw/rpict"
 OUTPUT_DIR = BASE_DIR / "reports/phase2"

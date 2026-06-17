@@ -5,7 +5,7 @@ import numpy as np
 from datetime import timedelta
 
 # Configuration
-BASE_DIR = "/Users/rainyforest/Desktop/Univ./Ewha/2025-2026 Capstone PJT/vm-power-attribution"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PHASE3_DIR = os.path.join(BASE_DIR, "data/raw/alienware/phase3_fixed")
 RPICT_DIR = os.path.join(BASE_DIR, "data/raw/rpict")
 REPORT_FILE = os.path.join(BASE_DIR, "reports/phase3/system_power.tsv")
