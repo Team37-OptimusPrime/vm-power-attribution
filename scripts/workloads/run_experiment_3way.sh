@@ -142,6 +142,9 @@ check_prerequisites() {
     [ -d "$NODEJS_CGROUP" ] || { echo "nodejs.slice 없음. setup_cgroups.sh 먼저 실행."; exit 1; }
     command -v node &>/dev/null    || { echo "Node.js 미설치."; exit 1; }
     command -v setpriv &>/dev/null || { echo "setpriv 미설치 (util-linux 포함, 필수)."; exit 1; }
+    # express 확인 (node_modules는 gitignore — fresh clone엔 없음)
+    ( cd "$WORKLOAD_DIR" && node -e "require('express')" ) 2>/dev/null || {
+        echo "ERROR: express 미설치 → cd $WORKLOAD_DIR && npm install express"; exit 1; }
     command -v ffmpeg &>/dev/null  || warn "ffmpeg 미설치 (Case 2 건너뜀, sudo apt install ffmpeg)"
 
     local gpu_count
