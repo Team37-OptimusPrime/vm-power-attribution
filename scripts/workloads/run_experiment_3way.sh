@@ -4,14 +4,17 @@
 # 목적: 2-way에서 3-way로 확장했을 때 에너지 귀속 모델의 일반성 검증
 #       "조합을 다 해보기보다 한두 케이스 정도로 별 차이 없다는 정도면 족함" — 교수님
 #
-# 실험 케이스 (2가지):
-#   Case 1: YOLO(GPU0) + ResNet(GPU1) + Node.js(CPU)  — AI+AI+NonAI
-#   Case 2: YOLO(GPU0) + GPT2(GPU1)   + ffmpeg(CPU)   — AI+AI+NonAI (다른 NonAI)
+# 실험 케이스 (3가지):
+#   Case 1: YOLO(GPU0) + ResNet(GPU1) + Node.js(CPU)  — AI+AI+NonAI (3-way)
+#   Case 2: YOLO(GPU0) + GPT2(GPU1)   + ffmpeg(CPU)   — AI+AI+NonAI (3-way, 다른 NonAI)
+#   Case 3: YOLO(GPU0) + GPT2(GPU1) + Node.js(CPU) + ffmpeg(CPU) — 4-way
+#           (교수님 3월 메일: "3개 혹은 4개의 워크로드를 동시에")
 #
 # cgroup 구성:
 #   yolo.slice    → Workload A (AI, GPU0): cpuset 0-1, 4GB
 #   nodejs.slice  → Workload B (AI, GPU1): cpuset 2-3, 4GB
 #   work.slice    → Workload C (NonAI, CPU only): cpuset 4-5, 4GB   ← 신규 생성
+#   work2.slice   → Workload D (NonAI, CPU only): cpuset 6-7, 4GB   ← 4-way용
 #
 # Usage:
 #   sudo -E ./run_experiment_3way.sh [RUN_NUM]
@@ -49,6 +52,7 @@ CGROUP_ROOT="/sys/fs/cgroup"
 YOLO_CGROUP="$CGROUP_ROOT/yolo.slice"      # Workload A (AI)
 NODEJS_CGROUP="$CGROUP_ROOT/nodejs.slice"   # Workload B (AI in 3-way)
 WORK_CGROUP="$CGROUP_ROOT/work.slice"       # Workload C (NonAI) — 신규
+WORK2_CGROUP="$CGROUP_ROOT/work2.slice"     # Workload D (NonAI) — 4-way Case 3용
 
 ########################################
 # 타이밍
@@ -103,6 +107,28 @@ setup_work_cgroup() {
     log "work.slice 설정 완료:"
     log "  cpuset.cpus = $(cat $WORK_CGROUP/cpuset.cpus 2>/dev/null || echo 'N/A')"
     log "  memory.max  = $(cat $WORK_CGROUP/memory.max  2>/dev/null || echo 'N/A')"
+}
+
+########################################
+# work2.slice cgroup 생성 및 설정 (4-way Case 3용)
+########################################
+setup_work2_cgroup() {
+    log "work2.slice cgroup 설정 중..."
+
+    if [ ! -d "$WORK2_CGROUP" ]; then
+        mkdir -p "$WORK2_CGROUP"
+        log "work2.slice 생성: $WORK2_CGROUP"
+    fi
+
+    # work2.slice 설정: cpuset 6-7 (2코어), 4GB
+    echo "0"          > "$WORK2_CGROUP/cpuset.mems" 2>/dev/null || warn "cpuset.mems 설정 실패"
+    echo "6-7"        > "$WORK2_CGROUP/cpuset.cpus" 2>/dev/null || warn "cpuset.cpus 설정 실패"
+    echo "4294967296" > "$WORK2_CGROUP/memory.max"  2>/dev/null || warn "memory.max 설정 실패 (4GB)"
+
+    sleep 1
+    log "work2.slice 설정 완료:"
+    log "  cpuset.cpus = $(cat $WORK2_CGROUP/cpuset.cpus 2>/dev/null || echo 'N/A')"
+    log "  memory.max  = $(cat $WORK2_CGROUP/memory.max  2>/dev/null || echo 'N/A')"
 }
 
 ########################################
@@ -229,16 +255,17 @@ start_nodejs_3way() {
 ########################################
 start_ffmpeg_3way() {
     local duration=$1
-    local log_file="$LOG_DIR/ffmpeg_work.log"
+    local slice=${2:-work.slice}    # 기본 work.slice, 4-way에서는 work2.slice
+    local log_file="$LOG_DIR/ffmpeg_${slice%.slice}.log"
 
     timeout $((duration + 10)) \
-        systemd-run --scope --slice=work.slice --uid=$REAL_UID --gid=$REAL_GID \
+        systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
         bash -c "
             source $WORKLOAD_DIR/yolo_venv/bin/activate
             python3 $WORKLOAD_DIR/ffmpeg_encode.py --duration $duration 2>&1
         " > "$log_file" 2>&1 &
     WL_C_PID=$!
-    log "ffmpeg 시작 (PID: $WL_C_PID, work.slice, log: $log_file)"
+    log "ffmpeg 시작 (PID: $WL_C_PID, $slice, log: $log_file)"
 }
 
 ########################################
@@ -250,8 +277,10 @@ start_loggers() {
     python3 "$SCRIPT_DIR/host_logger.py" \
         -o "$LOG_DIR/${prefix}_host.csv" -d "$duration" -i 1 &
     HOST_PID=$!
-    # cgroup_logger는 yolo.slice + nodejs.slice + work.slice 모두 로깅
+    # cgroup_logger 기본값은 yolo.slice+nodejs.slice뿐이므로
+    # work.slice/work2.slice를 반드시 명시해야 함 (미지정 시 3/4번째 워크로드 데이터 누락)
     python3 "$SCRIPT_DIR/cgroup_logger.py" \
+        -c yolo.slice nodejs.slice work.slice work2.slice \
         -o "$LOG_DIR/${prefix}_cgroup.csv" -d "$duration" -i 1 \
         --include-system-io &
     CGROUP_PID=$!
@@ -298,6 +327,7 @@ echo -e "${MAGENTA}출력: $LOG_DIR${NC}"
 check_prerequisites
 set_cpu_fixed
 setup_work_cgroup
+setup_work2_cgroup
 
 mkdir -p "$LOG_DIR"
 chown -R $REAL_UID:$REAL_GID "$LOG_DIR"
@@ -308,18 +338,21 @@ cat > "$LOG_DIR/config.txt" << EOF
 Date: $(date)
 Run: ${RUN_NUM}
 
-cgroup allocation (equal 3-way, 2 cores / 4GB each):
+cgroup allocation (equal, 2 cores / 4GB each):
   yolo.slice   → cpuset 0-1, 4GB  (Workload A: AI, GPU0)
   nodejs.slice → cpuset 2-3, 4GB  (Workload B: AI, GPU1)
   work.slice   → cpuset 4-5, 4GB  (Workload C: NonAI, CPU only)
+  work2.slice  → cpuset 6-7, 4GB  (Workload D: NonAI, CPU only, 4-way)
 
 Cases:
   Case 1: YOLO(yolo.slice,GPU0) + ResNet(nodejs.slice,GPU1) + Node.js(work.slice)
   Case 2: YOLO(yolo.slice,GPU0) + GPT2(nodejs.slice,GPU1)   + ffmpeg(work.slice)
+  Case 3: YOLO(yolo.slice,GPU0) + GPT2(nodejs.slice,GPU1)
+          + Node.js(work.slice) + ffmpeg(work2.slice)        — 4-way
 
 Purpose:
-  Extend 2-way energy attribution model to 3-way
-  Verify model accuracy under 3-workload concurrent execution
+  Extend 2-way energy attribution model to 3-way and 4-way
+  Verify model accuracy under 3/4-workload concurrent execution
   Expected: similar per-workload energy as in 2-way (energy profiles preserved)
 
 Hardware: Alienware Aurora R12 (i7-11700F 8c/16t, RTX 3060 x2, 32GB DDR4)
@@ -362,6 +395,24 @@ start_loggers "solo_nodejs" $WORKLOAD_DURATION
 sleep 2
 wait_loggers; stop_workloads; drop_caches
 sleep $COOLDOWN
+
+phase "Phase 3b: GPT2 Solo (GPU0, yolo.slice) - ${WORKLOAD_DURATION}s"
+info "Case 2/3 검증용 solo 기준값 (동일 run 내 확보)"
+start_loggers "solo_gpt2" $WORKLOAD_DURATION
+sleep 2
+start_ai_workload "gpt2" 0 "yolo.slice" $WORKLOAD_DURATION "WL_A_PID"
+wait_loggers; stop_workloads; drop_caches
+sleep $COOLDOWN
+
+if command -v ffmpeg &>/dev/null; then
+    phase "Phase 3c: ffmpeg Solo (work.slice) - ${WORKLOAD_DURATION}s"
+    info "Case 2/3 검증용 solo 기준값 (동일 run 내 확보)"
+    start_loggers "solo_ffmpeg" $WORKLOAD_DURATION
+    sleep 2
+    start_ffmpeg_3way $WORKLOAD_DURATION "work.slice"
+    wait_loggers; stop_workloads; drop_caches
+    sleep $COOLDOWN
+fi
 
 ########################################
 # Case 1: YOLO + ResNet + Node.js (AI+AI+NonAI)
@@ -410,6 +461,35 @@ if command -v ffmpeg &>/dev/null; then
 else
     warn "ffmpeg 미설치 → Case 2 (ffmpeg) 건너뜀"
     warn "  설치: sudo apt install ffmpeg 후 재실행"
+fi
+
+########################################
+# Case 3: YOLO + GPT2 + Node.js + ffmpeg (4-way)
+# 교수님 3월 메일: "3개 혹은 4개의 워크로드를 동시에"
+########################################
+if command -v ffmpeg &>/dev/null; then
+    phase "Phase 6 [Case 3]: YOLO(GPU0) + GPT2(GPU1) + Node.js(CPU) + ffmpeg(CPU) — 4-way"
+    info "yolo.slice(0-1) | nodejs.slice(2-3) | work.slice(4-5) | work2.slice(6-7)"
+
+    start_nodejs_3way $WORKLOAD_DURATION
+    start_loggers "case3_yolo_gpt2_nodejs_ffmpeg" $WORKLOAD_DURATION
+    sleep 2
+
+    # Workload A: YOLO → GPU0, yolo.slice
+    start_ai_workload "yolo_medium" 0 "yolo.slice"   $WORKLOAD_DURATION "WL_A_PID"
+    # Workload B: GPT2 → GPU1, nodejs.slice
+    start_ai_workload "gpt2"        1 "nodejs.slice"  $WORKLOAD_DURATION "WL_B_PID"
+    # Workload C: Node.js → CPU, work.slice (위에서 시작)
+    # Workload D: ffmpeg → CPU, work2.slice
+    start_ffmpeg_3way $WORKLOAD_DURATION "work2.slice"
+
+    wait_loggers
+    stop_workloads
+    drop_caches
+    log "Case 3 (4-way) 완료. Cooldown ${COOLDOWN}s..."
+    sleep $COOLDOWN
+else
+    warn "ffmpeg 미설치 → Case 3 (4-way) 건너뜀"
 fi
 
 ########################################
