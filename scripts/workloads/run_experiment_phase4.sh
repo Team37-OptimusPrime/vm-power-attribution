@@ -248,6 +248,10 @@ done"
         gpt2)
             inner="source $WORKLOAD_DIR/yolo_venv/bin/activate && python3 $WORKLOAD_DIR/gpt2_inference.py --duration $duration"
             ;;
+        llm)
+            # W10: 현대 소형 LLM (기본 Qwen2.5-3B-Instruct) — WITH_LLM=1일 때만 사용
+            inner="source $WORKLOAD_DIR/yolo_venv/bin/activate && python3 $WORKLOAD_DIR/llm_inference.py --duration $duration"
+            ;;
     esac
     run_in_cgroup "$slice" "$log_file" WL_A_PID $duration 1 \
         env CUDA_VISIBLE_DEVICES=$gpu_id bash -c "$inner"
@@ -359,6 +363,7 @@ stop_workloads() {
     pkill -f "node.*server"       2>/dev/null || true
     pkill -f "resnet18_inference" 2>/dev/null || true
     pkill -f "gpt2_inference"     2>/dev/null || true
+    pkill -f "llm_inference"      2>/dev/null || true
     pkill -f "yolo predict"       2>/dev/null || true
     pkill -f "ffmpeg_encode"      2>/dev/null || true
     pkill -f "ffmpeg.*testsrc"    2>/dev/null || true
@@ -425,6 +430,13 @@ smoke_test() {
     start_fio_randrw "nodejs.slice" 10 "smoke"
     sleep 12; stop_workloads
     [ -s "$LOG_DIR/smoke_fio_randrw.json" ] && log "  ✓ fio OK" || { warn "  ✗ fio 실패 (json 출력 없음)"; fail=1; }
+
+    if [ "${WITH_LLM:-0}" = "1" ]; then
+        info "S6b: 최신 LLM Qwen2.5-3B (GPU0, yolo.slice, 30s — 캐시 사전 필수)"
+        start_ai_gpu "llm" 0 "yolo.slice" 30
+        sleep 30; stop_workloads
+        smoke_check "$LOG_DIR/llm_gpu0_yolo.log" "\[LLM\]" "LLM" || fail=1
+    fi
 
     info "S7: Node.js (nodejs.slice, 12s)"
     start_nodejs 12
@@ -569,6 +581,15 @@ sleep 2
 start_ai_gpu "gpt2" 0 "yolo.slice" $WORKLOAD_DURATION
 wait_loggers; stop_workloads; drop_caches; sleep $COOLDOWN
 
+# W10 (옵션): 현대 소형 LLM — WITH_LLM=1 sudo -E ./run_experiment_phase4.sh 로 활성화
+if [ "${WITH_LLM:-0}" = "1" ]; then
+    phase "Solo 9: 최신 LLM Qwen2.5-3B (GPU0, yolo.slice) - ${WORKLOAD_DURATION}s"
+    start_loggers "solo_llm" $WORKLOAD_DURATION
+    sleep 2
+    start_ai_gpu "llm" 0 "yolo.slice" $WORKLOAD_DURATION
+    wait_loggers; stop_workloads; drop_caches; sleep $COOLDOWN
+fi
+
 ########################################
 # Concurrent pairs
 ########################################
@@ -599,6 +620,16 @@ sleep 2
 start_ai_gpu "gpt2" 0 "yolo.slice" $WORKLOAD_DURATION
 start_stress_mem "nodejs.slice" $WORKLOAD_DURATION "C4"
 wait_loggers; stop_workloads; drop_caches; sleep $COOLDOWN
+
+# W10 (옵션): 최신 LLM + Node.js — 현대 LLM의 concurrent 귀속 검증
+if [ "${WITH_LLM:-0}" = "1" ]; then
+    phase "Pair C5: LLM Qwen2.5-3B(GPU0) + Node.js — 최신 LLM + NonAI"
+    start_nodejs $WORKLOAD_DURATION
+    start_loggers "C5_llm_nodejs" $WORKLOAD_DURATION
+    sleep 2
+    start_ai_gpu "llm" 0 "yolo.slice" $WORKLOAD_DURATION
+    wait_loggers; stop_workloads; drop_caches; sleep $COOLDOWN
+fi
 
 ########################################
 # 완료
