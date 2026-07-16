@@ -563,6 +563,25 @@ if command -v ffmpeg &>/dev/null; then
     sleep $COOLDOWN
 fi
 
+# GPU 디바이스 일치 solo 기준값 — concurrent에서 ResNet/GPT2는 GPU1에 배치되는데
+# GPU0/GPU1은 idle·active 전력이 다르다 (run1 실측: 동일 ResNet이 GPU0 141W vs
+# GPU1 163W). 검증 오차에서 디바이스 차이를 제거하려면 같은 디바이스의 solo가 필요.
+phase "Phase 3d: ResNet Solo (GPU1, nodejs.slice) - ${WORKLOAD_DURATION}s"
+info "Case 1 검증용: concurrent와 동일한 GPU1 배치 기준값"
+start_loggers "solo_resnet_gpu1" $WORKLOAD_DURATION
+sleep 2
+start_ai_workload "resnet18" 1 "nodejs.slice" $WORKLOAD_DURATION "WL_B_PID"
+wait_loggers; stop_workloads; drop_caches
+sleep $COOLDOWN
+
+phase "Phase 3e: GPT2 Solo (GPU1, nodejs.slice) - ${WORKLOAD_DURATION}s"
+info "Case 2/3 검증용: concurrent와 동일한 GPU1 배치 기준값"
+start_loggers "solo_gpt2_gpu1" $WORKLOAD_DURATION
+sleep 2
+start_ai_workload "gpt2" 1 "nodejs.slice" $WORKLOAD_DURATION "WL_B_PID"
+wait_loggers; stop_workloads; drop_caches
+sleep $COOLDOWN
+
 ########################################
 # Case 1: YOLO + ResNet + Node.js (AI+AI+NonAI)
 ########################################
