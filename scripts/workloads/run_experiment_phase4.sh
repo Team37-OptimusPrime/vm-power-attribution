@@ -21,6 +21,10 @@
 #   yolo.slice   → cpuset 0-1, 4GB (워크로드 A)
 #   nodejs.slice → cpuset 2-3, 4GB (워크로드 B)
 #
+# 실행 방식: 모든 워크로드는 cgroup.procs 직접 등록($BASHPID)으로 실행한다.
+#   systemd-run --slice와 raw cgroup을 혼용하면 이전 run 상태에 따라
+#   "Job failed"/attach 실패가 비결정적으로 발생한다 (3-way run1/run2에서 실증).
+#
 # Usage:
 #   sudo -E ./run_experiment_phase4.sh [RUN_NUM]
 #   예) sudo -E ./run_experiment_phase4.sh 1    → phase4_expand_run1
@@ -89,6 +93,7 @@ check_prerequisites() {
     [ -d "$YOLO_CGROUP" ]   || { echo "yolo.slice 없음. setup_cgroups.sh 먼저 실행."; exit 1; }
     [ -d "$NODEJS_CGROUP" ] || { echo "nodejs.slice 없음. setup_cgroups.sh 먼저 실행."; exit 1; }
     command -v node &>/dev/null      || { echo "Node.js 미설치."; exit 1; }
+    command -v setpriv &>/dev/null   || { echo "setpriv 미설치 (util-linux 포함, 필수)."; exit 1; }
     command -v ffmpeg &>/dev/null    || { echo "ffmpeg 미설치. sudo apt install ffmpeg"; exit 1; }
     command -v stress-ng &>/dev/null || { echo "stress-ng 미설치. sudo apt install stress-ng"; exit 1; }
     command -v fio &>/dev/null       || { echo "fio 미설치. sudo apt install fio"; exit 1; }
@@ -119,7 +124,27 @@ check_prerequisites() {
 }
 
 ########################################
-# cgroup 자원 설정 (phase3와 동일: 2코어/4GB 씩)
+# slice 상태 리셋 — 이전 run 잔재 제거
+# (systemd scope 자식 + 하위 컨트롤러가 남아 있으면 cgroup v2의
+#  internal-node 규칙 때문에 프로세스 직접 등록이 실패한다)
+########################################
+reset_slice() {
+    local cg="$CGROUP_ROOT/$1"
+    [ -d "$cg" ] || return 0
+    local child
+    for child in "$cg"/*/; do
+        [ -d "$child" ] || continue
+        if [ -f "$child/cgroup.procs" ]; then
+            while read -r pid; do kill -9 "$pid" 2>/dev/null || true; done < "$child/cgroup.procs" 2>/dev/null
+        fi
+        sleep 0.3
+        rmdir "$child" 2>/dev/null || warn "자식 cgroup 제거 실패: $child (프로세스 잔존?)"
+    done
+    echo "-cpuset -memory -cpu -io" > "$cg/cgroup.subtree_control" 2>/dev/null || true
+}
+
+########################################
+# cgroup 자원 설정 (phase3와 동일: 2코어/4GB + cpu.max 200%)
 ########################################
 setup_cgroups_equal() {
     echo "+cpuset +memory +cpu +io" > "$CGROUP_ROOT/cgroup.subtree_control" 2>/dev/null || true
@@ -127,12 +152,14 @@ setup_cgroups_equal() {
     echo "0"          > "$YOLO_CGROUP/cpuset.mems" 2>/dev/null || true
     echo "0-1"        > "$YOLO_CGROUP/cpuset.cpus" 2>/dev/null || true
     echo "4294967296" > "$YOLO_CGROUP/memory.max"  2>/dev/null || true
+    echo "200000 100000" > "$YOLO_CGROUP/cpu.max"  2>/dev/null || true
 
     echo "0"          > "$NODEJS_CGROUP/cpuset.mems" 2>/dev/null || true
     echo "2-3"        > "$NODEJS_CGROUP/cpuset.cpus" 2>/dev/null || true
     echo "4294967296" > "$NODEJS_CGROUP/memory.max"  2>/dev/null || true
+    echo "200000 100000" > "$NODEJS_CGROUP/cpu.max"  2>/dev/null || true
 
-    log "cgroup 설정: yolo.slice(0-1, 4GB) | nodejs.slice(2-3, 4GB)"
+    log "cgroup 설정: yolo.slice(0-1, 4GB, 200%) | nodejs.slice(2-3, 4GB, 200%)"
 }
 
 ########################################
@@ -158,104 +185,104 @@ CURL_PID=""; NODE_PID=""
 HOST_PID=""; CGROUP_PID=""
 
 ########################################
+# 공통: cgroup 직접 등록 실행기
+#   run_in_cgroup <slice> <log_file> <pid_var> <duration> <as_user:0|1> <cmd...>
+#   - $BASHPID 사용 ($$는 메인 스크립트 PID — 절대 금지)
+#   - setpriv: PAM 없이 uid 강하 → cgroup 소속 유지
+########################################
+run_in_cgroup() {
+    local slice=$1; local log_file=$2; local pid_var=$3
+    local duration=$4; local as_user=$5
+    shift 5
+    local cg="$CGROUP_ROOT/$slice"
+
+    if [ "$as_user" = "1" ]; then
+        ( if ! echo $BASHPID > "$cg/cgroup.procs" 2>/dev/null; then
+              echo "[FATAL] cgroup attach 실패: $cg"
+              exit 1
+          fi
+          exec timeout $((duration + 10)) \
+              setpriv --reuid=$REAL_UID --regid=$REAL_GID --init-groups \
+              env HOME="/home/$REAL_USER" PYTHONUNBUFFERED=1 "$@"
+        ) > "$log_file" 2>&1 &
+    else
+        ( if ! echo $BASHPID > "$cg/cgroup.procs" 2>/dev/null; then
+              echo "[FATAL] cgroup attach 실패: $cg"
+              exit 1
+          fi
+          exec timeout $((duration + 10)) env PYTHONUNBUFFERED=1 "$@"
+        ) > "$log_file" 2>&1 &
+    fi
+    eval "${pid_var}=$!"
+}
+
+########################################
 # 워크로드 시작 함수들
 ########################################
 
 # ResNet-18 CPU 추론 (CPU-AI)
 start_resnet_cpu() {
     local slice=$1; local duration=$2
-    local log_file="$LOG_DIR/resnet_cpu_${slice%.slice}.log"
-    timeout $((duration + 10)) \
-        systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
-        bash -c "
-            export CUDA_VISIBLE_DEVICES=''
-            source $WORKLOAD_DIR/yolo_venv/bin/activate
-            python3 $WORKLOAD_DIR/resnet18_inference.py --duration $duration --device cpu 2>&1
-        " > "$log_file" 2>&1 &
-    WL_A_PID=$!
+    run_in_cgroup "$slice" "$LOG_DIR/resnet_cpu_${slice%.slice}.log" WL_A_PID $duration 1 \
+        env CUDA_VISIBLE_DEVICES="" \
+        bash -c "source $WORKLOAD_DIR/yolo_venv/bin/activate && python3 $WORKLOAD_DIR/resnet18_inference.py --duration $duration --device cpu"
     log "ResNet-CPU 시작 (PID: $WL_A_PID, $slice)"
 }
 
-# GPU AI 워크로드 (yolo_medium | gpt2) — phase3와 동일 패턴
+# GPU AI 워크로드 (yolo_medium | gpt2)
 start_ai_gpu() {
     local workload_type=$1; local gpu_id=$2; local slice=$3; local duration=$4
     local log_file="$LOG_DIR/${workload_type}_gpu${gpu_id}_${slice%.slice}.log"
+    local inner=""
     case "$workload_type" in
         yolo_medium)
-            timeout $((duration + 10)) \
-                systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
-                bash -c "
-                    export CUDA_VISIBLE_DEVICES=$gpu_id
-                    source $WORKLOAD_DIR/yolo_venv/bin/activate
-                    cd $WORKLOAD_DIR
-                    END_TIME=\$((SECONDS + $duration - 5))
-                    while [ \$SECONDS -lt \$END_TIME ]; do
-                        yolo predict model=yolov8m.pt source=test_video.mp4 device=0 verbose=False 2>&1 || true
-                    done
-                " > "$log_file" 2>&1 &
+            inner="cd $WORKLOAD_DIR && source yolo_venv/bin/activate && \
+END_TIME=\$((SECONDS + $duration - 5)); \
+while [ \$SECONDS -lt \$END_TIME ]; do \
+  yolo predict model=yolov8m.pt source=test_video.mp4 device=0 verbose=False || true; \
+done"
             ;;
         gpt2)
-            timeout $((duration + 10)) \
-                systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
-                bash -c "
-                    export CUDA_VISIBLE_DEVICES=$gpu_id
-                    source $WORKLOAD_DIR/yolo_venv/bin/activate
-                    python3 $WORKLOAD_DIR/gpt2_inference.py --duration $duration 2>&1
-                " > "$log_file" 2>&1 &
+            inner="source $WORKLOAD_DIR/yolo_venv/bin/activate && python3 $WORKLOAD_DIR/gpt2_inference.py --duration $duration"
             ;;
     esac
-    WL_A_PID=$!
+    run_in_cgroup "$slice" "$log_file" WL_A_PID $duration 1 \
+        env CUDA_VISIBLE_DEVICES=$gpu_id bash -c "$inner"
     log "${workload_type} 시작 (PID: $WL_A_PID, GPU${gpu_id}, $slice)"
 }
 
-# ffmpeg x264 (CPU-NonAI)
+# ffmpeg x264 (CPU-NonAI) — 표준 라이브러리만 사용, venv/유저 강하 불필요
 start_ffmpeg() {
-    local slice=$1; local duration=$2
-    local log_file="$LOG_DIR/ffmpeg_${slice%.slice}.log"
-    timeout $((duration + 10)) \
-        systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
-        bash -c "
-            source $WORKLOAD_DIR/yolo_venv/bin/activate
-            python3 $WORKLOAD_DIR/ffmpeg_encode.py --duration $duration 2>&1
-        " > "$log_file" 2>&1 &
-    WL_A_PID=$!
+    local slice=$1; local duration=$2; local prefix=${3:-solo}
+    run_in_cgroup "$slice" "$LOG_DIR/${prefix}_ffmpeg_${slice%.slice}.log" WL_A_PID $duration 0 \
+        python3 "$WORKLOAD_DIR/ffmpeg_encode.py" --duration $duration
     log "ffmpeg 시작 (PID: $WL_A_PID, $slice)"
 }
 
 # stress-ng 메모리 (Memory-NonAI): 2 workers × 1.5GB = 3GB (4GB limit 내)
 start_stress_mem() {
-    local slice=$1; local duration=$2
-    local log_file="$LOG_DIR/stressmem_${slice%.slice}.log"
-    timeout $((duration + 10)) \
-        systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
-        stress-ng --vm 2 --vm-bytes 1536M --vm-keep --timeout ${duration}s \
-        > "$log_file" 2>&1 &
-    WL_B_PID=$!
+    local slice=$1; local duration=$2; local prefix=${3:-solo}
+    run_in_cgroup "$slice" "$LOG_DIR/${prefix}_stressmem_${slice%.slice}.log" WL_B_PID $duration 0 \
+        stress-ng --vm 2 --vm-bytes 1536M --vm-keep --timeout ${duration}s
     log "stress-ng 메모리 시작 (PID: $WL_B_PID, $slice, 2×1.5GB)"
 }
 
 # fio randrw (I/O-NonAI)
 start_fio_randrw() {
-    local slice=$1; local duration=$2
-    local log_file="$LOG_DIR/fio_randrw_${slice%.slice}.log"
-    timeout $((duration + 10)) \
-        systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
+    local slice=$1; local duration=$2; local prefix=${3:-solo}
+    run_in_cgroup "$slice" "$LOG_DIR/${prefix}_fio_randrw_${slice%.slice}.log" WL_B_PID $duration 0 \
         fio --name=randrw --filename="$FIO_FILE" --size=2G \
             --rw=randrw --rwmixread=70 --bs=4k --iodepth=32 --direct=1 \
             --time_based --runtime=${duration} --output-format=json \
-            --output="$LOG_DIR/fio_randrw_${slice%.slice}.json" \
-        > "$log_file" 2>&1 &
-    WL_B_PID=$!
+            --output="$LOG_DIR/${prefix}_fio_randrw.json"
     log "fio randrw 시작 (PID: $WL_B_PID, $slice, 4k/QD32/R70W30)"
 }
 
-# fio bursty (I/O-NonAI): iodepth 1 → 8 → 32 램프 (각 30s) — R1#3 bursty 대응
+# fio bursty (I/O-NonAI): iodepth 1 → 8 → 32 램프 (각 duration/3초) — R1#3 bursty 대응
 start_fio_bursty() {
     local slice=$1; local duration=$2
     local seg=$((duration / 3))
-    local log_file="$LOG_DIR/fio_bursty_${slice%.slice}.log"
-    timeout $((duration + 15)) \
-        systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
+    run_in_cgroup "$slice" "$LOG_DIR/fio_bursty_${slice%.slice}.log" WL_B_PID $((duration + 5)) 0 \
         bash -c "
             for qd in 1 8 32; do
                 fio --name=burst_qd\$qd --filename=$FIO_FILE --size=2G \
@@ -263,21 +290,27 @@ start_fio_bursty() {
                     --time_based --runtime=$seg --output-format=json \
                     --output=$LOG_DIR/fio_bursty_qd\${qd}.json 2>&1
             done
-        " > "$log_file" 2>&1 &
-    WL_B_PID=$!
+        "
     log "fio bursty 시작 (PID: $WL_B_PID, $slice, QD 1→8→32 × ${seg}s)"
 }
 
-# Node.js Heavy (nodejs.slice) — phase3와 동일 패턴
+# Node.js Heavy (nodejs.slice)
 start_nodejs() {
     local duration=$1
     cd "$WORKLOAD_DIR"
-    ( echo $$ > "$NODEJS_CGROUP/cgroup.procs" 2>/dev/null || true
-      exec node "server_heavy.js" 2>/dev/null ) &
+    ( if ! echo $BASHPID > "$NODEJS_CGROUP/cgroup.procs" 2>/dev/null; then
+          echo "[FATAL] nodejs.slice attach 실패 — Node.js가 cgroup 밖에서 실행됨"
+          exit 1
+      fi
+      exec node "server_heavy.js" ) > "$LOG_DIR/nodejs_server.log" 2>&1 &
     NODE_PID=$!
     sleep 2
+    if ! kill -0 $NODE_PID 2>/dev/null; then
+        warn "Node.js 시작 실패! $LOG_DIR/nodejs_server.log 확인"
+    fi
     log "Node.js 서버 시작 (PID: $NODE_PID, nodejs.slice)"
 
+    # Heavy 부하 (curl은 cgroup 밖 — 외부 클라이언트 역할)
     ( END_TIME=$((SECONDS + duration - 5))
       for worker in {1..4}; do
         ( while [ $SECONDS -lt $END_TIME ]; do
@@ -340,6 +373,82 @@ cleanup() { stop_workloads; }
 trap cleanup EXIT
 
 ########################################
+# 스모크 테스트 — 본 실험 전 각 워크로드 시험 가동 (~2분)
+# 하나라도 실패하면 즉시 중단 → 30분짜리 무효 run 방지
+########################################
+smoke_check() {  # $1=로그파일 $2=성공마커 $3=이름
+    if grep -q "FileNotFoundError\|Traceback\|FATAL\|Job failed" "$1" 2>/dev/null; then
+        warn "  ✗ $3 실패 (에러 발견) → $1"
+        return 1
+    fi
+    if ! grep -q "$2" "$1" 2>/dev/null; then
+        warn "  ✗ $3 실패 (성공 마커 '$2' 없음) → $1"
+        return 1
+    fi
+    log "  ✓ $3 OK"
+    return 0
+}
+
+smoke_test() {
+    phase "Phase S: 워크로드 스모크 테스트 (~2분) — 실패 시 즉시 중단"
+    local fail=0
+
+    info "S1: ResNet-CPU (yolo.slice, 15s)"
+    start_resnet_cpu "yolo.slice" 15
+    sleep 15; stop_workloads
+    smoke_check "$LOG_DIR/resnet_cpu_yolo.log" "\[ResNet18\]" "ResNet-CPU" || fail=1
+
+    info "S2: YOLO (GPU0, yolo.slice, 20s)"
+    start_ai_gpu "yolo_medium" 0 "yolo.slice" 20
+    sleep 20; stop_workloads
+    smoke_check "$LOG_DIR/yolo_medium_gpu0_yolo.log" "Ultralytics" "YOLO" || fail=1
+
+    info "S3: GPT2 (GPU0, yolo.slice, 25s)"
+    start_ai_gpu "gpt2" 0 "yolo.slice" 25
+    sleep 25; stop_workloads
+    smoke_check "$LOG_DIR/gpt2_gpu0_yolo.log" "\[GPT-2\]" "GPT2" || fail=1
+
+    info "S4: ffmpeg (yolo.slice, 12s)"
+    start_ffmpeg "yolo.slice" 12 "smoke"
+    sleep 12; stop_workloads
+    smoke_check "$LOG_DIR/smoke_ffmpeg_yolo.log" "\[ffmpeg\] 시작" "ffmpeg" || fail=1
+
+    info "S5: stress-ng (nodejs.slice, 10s)"
+    start_stress_mem "nodejs.slice" 10 "smoke"
+    sleep 10; stop_workloads
+    smoke_check "$LOG_DIR/smoke_stressmem_nodejs.log" "stress-ng" "stress-ng" || fail=1
+
+    info "S6: fio randrw (nodejs.slice, 10s)"
+    start_fio_randrw "nodejs.slice" 10 "smoke"
+    sleep 12; stop_workloads
+    [ -s "$LOG_DIR/smoke_fio_randrw.json" ] && log "  ✓ fio OK" || { warn "  ✗ fio 실패 (json 출력 없음)"; fail=1; }
+
+    info "S7: Node.js (nodejs.slice, 12s)"
+    start_nodejs 12
+    sleep 5
+    if curl -s --max-time 3 "http://localhost:3000/" >/dev/null 2>&1 \
+       && [ -n "$(cat "$NODEJS_CGROUP/cgroup.procs" 2>/dev/null)" ]; then
+        log "  ✓ Node.js OK (응답 + nodejs.slice 등록 확인)"
+    else
+        warn "  ✗ Node.js 실패 → $LOG_DIR/nodejs_server.log"
+        fail=1
+    fi
+    sleep 7; stop_workloads
+
+    if [ "$fail" -ne 0 ]; then
+        echo ""
+        echo -e "${RED}========================================${NC}"
+        echo -e "${RED}스모크 테스트 실패 — 본 실험을 시작하지 않습니다.${NC}"
+        echo -e "${RED}위 로그를 확인하고 문제 해결 후 재실행하세요.${NC}"
+        echo -e "${RED}========================================${NC}"
+        exit 1
+    fi
+    log "스모크 테스트 전체 통과 — 본 실험 시작"
+    drop_caches
+    sleep $COOLDOWN
+}
+
+########################################
 # 메인
 ########################################
 phase "Phase 4: 워크로드 확장 실험 — Run ${RUN_NUM}"
@@ -347,6 +456,11 @@ echo -e "${MAGENTA}신규 4종 solo + bursty + 신규 concurrent 4쌍${NC}"
 echo -e "${MAGENTA}출력: $LOG_DIR${NC}"
 
 check_prerequisites
+
+# 이전 run 잔재 정리 — 반드시 setup 전에
+reset_slice "yolo.slice"
+reset_slice "nodejs.slice"
+
 set_cpu_fixed
 setup_cgroups_equal
 
@@ -359,38 +473,37 @@ cat > "$LOG_DIR/config.txt" << EOF
 Date: $(date)
 Run: ${RUN_NUM}
 
-cgroup allocation (equal, 2 cores / 4GB each):
+cgroup allocation (equal, 2 cores / 4GB / cpu.max 200% each):
   yolo.slice   → cpuset 0-1, 4GB  (Workload A)
   nodejs.slice → cpuset 2-3, 4GB  (Workload B)
 CPU frequency: fixed 3.6GHz, turbo off, performance governor
+Execution: direct cgroup.procs registration (no systemd-run)
 
 New workloads:
   W5 ResNet-18 CPU inference : torchvision resnet18, batch=32, 3x224x224, device=cpu
-  W7 ffmpeg x264 encode      : lavfi testsrc 1920x1080@30fps -> null, preset default
+  W7 ffmpeg x264 encode      : lavfi testsrc 1920x1080@30fps -> null, preset medium
   W8 stress-ng memory        : --vm 2 --vm-bytes 1536M --vm-keep (3GB total)
   W9 fio randrw              : bs=4k iodepth=32 rwmixread=70 direct=1 file=2GB NVMe
   W9b fio bursty             : same, iodepth ramp 1 -> 8 -> 32 (30s each)
 
-Solo phases (reference for validation):
-  solo_resnet_cpu / solo_ffmpeg / solo_stressmem / solo_fio_randrw / solo_fio_bursty
-  solo_nodejs / solo_yolo(GPU0) / solo_gpt2(GPU0)
+test_video.mp4 md5: $(md5sum "$WORKLOAD_DIR/test_video.mp4" | cut -d' ' -f1)
 
+Solo phases: solo_resnet_cpu / solo_ffmpeg / solo_stressmem / solo_fio_randrw /
+             solo_fio_bursty / solo_nodejs / solo_yolo(GPU0) / solo_gpt2(GPU0)
 Concurrent pairs:
-  C1 resnetcpu_nodejs : ResNet-CPU(yolo.slice) + Node.js(nodejs.slice) — CPU 분할(AI vs NonAI)
-  C2 ffmpeg_nodejs    : ffmpeg(yolo.slice) + Node.js(nodejs.slice)    — CPU 분할(NonAI 쌍)
-  C3 yolo_fio         : YOLO(GPU0,yolo.slice) + fio(nodejs.slice)     — GPU + I/O
-  C4 gpt2_stressmem   : GPT2(GPU0,yolo.slice) + stress(nodejs.slice)  — GPU + Memory
-
-Purpose:
-  Expand workload set 4 -> 9 (with existing GEMM data: phase3_fixed PT* phases)
-  Cover 5 resource categories: GPU-AI / CPU-AI / CPU-NonAI / Memory / I/O
-  Validate attribution accuracy on new resource-category pairs
+  C1 resnetcpu_nodejs : ResNet-CPU(yolo.slice) + Node.js(nodejs.slice)
+  C2 ffmpeg_nodejs    : ffmpeg(yolo.slice) + Node.js(nodejs.slice)
+  C3 yolo_fio         : YOLO(GPU0,yolo.slice) + fio(nodejs.slice)
+  C4 gpt2_stressmem   : GPT2(GPU0,yolo.slice) + stress(nodejs.slice)
 
 Hardware: Alienware Aurora R12 (i7-11700KF 8c/16t, RTX 3060 x2, 32GB DDR4,
           Samsung SSD 980 500GB NVMe)
 Observation: ${WORKLOAD_DURATION}s per phase, first/last 10s trimmed in analysis
 EOF
 chown $REAL_UID:$REAL_GID "$LOG_DIR/config.txt"
+
+# 본 실험 전 스모크 테스트 — 실패 시 여기서 중단
+smoke_test
 
 EXPERIMENT_START=$SECONDS
 
@@ -414,19 +527,19 @@ wait_loggers; stop_workloads; drop_caches; sleep $COOLDOWN
 phase "Solo 2/8: ffmpeg (yolo.slice) - ${WORKLOAD_DURATION}s"
 start_loggers "solo_ffmpeg" $WORKLOAD_DURATION
 sleep 2
-start_ffmpeg "yolo.slice" $WORKLOAD_DURATION
+start_ffmpeg "yolo.slice" $WORKLOAD_DURATION "solo"
 wait_loggers; stop_workloads; drop_caches; sleep $COOLDOWN
 
 phase "Solo 3/8: stress-ng memory (nodejs.slice) - ${WORKLOAD_DURATION}s"
 start_loggers "solo_stressmem" $WORKLOAD_DURATION
 sleep 2
-start_stress_mem "nodejs.slice" $WORKLOAD_DURATION
+start_stress_mem "nodejs.slice" $WORKLOAD_DURATION "solo"
 wait_loggers; stop_workloads; drop_caches; sleep $COOLDOWN
 
 phase "Solo 4/8: fio randrw (nodejs.slice) - ${WORKLOAD_DURATION}s"
 start_loggers "solo_fio_randrw" $WORKLOAD_DURATION
 sleep 2
-start_fio_randrw "nodejs.slice" $WORKLOAD_DURATION
+start_fio_randrw "nodejs.slice" $WORKLOAD_DURATION "solo"
 wait_loggers; stop_workloads; drop_caches; sleep $COOLDOWN
 
 phase "Solo 5/8: fio bursty QD1→8→32 (nodejs.slice) - ${WORKLOAD_DURATION}s"
@@ -467,21 +580,21 @@ phase "Pair C2: ffmpeg + Node.js — CPU-NonAI 쌍"
 start_nodejs $WORKLOAD_DURATION
 start_loggers "C2_ffmpeg_nodejs" $WORKLOAD_DURATION
 sleep 2
-start_ffmpeg "yolo.slice" $WORKLOAD_DURATION
+start_ffmpeg "yolo.slice" $WORKLOAD_DURATION "C2"
 wait_loggers; stop_workloads; drop_caches; sleep $COOLDOWN
 
 phase "Pair C3: YOLO(GPU0) + fio randrw — GPU + I/O"
 start_loggers "C3_yolo_fio" $WORKLOAD_DURATION
 sleep 2
 start_ai_gpu "yolo_medium" 0 "yolo.slice" $WORKLOAD_DURATION
-start_fio_randrw "nodejs.slice" $WORKLOAD_DURATION
+start_fio_randrw "nodejs.slice" $WORKLOAD_DURATION "C3"
 wait_loggers; stop_workloads; drop_caches; sleep $COOLDOWN
 
 phase "Pair C4: GPT2(GPU0) + stress-ng memory — GPU + Memory"
 start_loggers "C4_gpt2_stressmem" $WORKLOAD_DURATION
 sleep 2
 start_ai_gpu "gpt2" 0 "yolo.slice" $WORKLOAD_DURATION
-start_stress_mem "nodejs.slice" $WORKLOAD_DURATION
+start_stress_mem "nodejs.slice" $WORKLOAD_DURATION "C4"
 wait_loggers; stop_workloads; drop_caches; sleep $COOLDOWN
 
 ########################################

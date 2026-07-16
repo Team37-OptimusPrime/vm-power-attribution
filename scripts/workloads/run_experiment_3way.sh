@@ -140,8 +140,9 @@ check_prerequisites() {
     log "사전 요구사항 확인..."
     [ -d "$YOLO_CGROUP" ]   || { echo "yolo.slice 없음. setup_cgroups.sh 먼저 실행."; exit 1; }
     [ -d "$NODEJS_CGROUP" ] || { echo "nodejs.slice 없음. setup_cgroups.sh 먼저 실행."; exit 1; }
-    command -v node &>/dev/null   || { echo "Node.js 미설치."; exit 1; }
-    command -v ffmpeg &>/dev/null || warn "ffmpeg 미설치 (Case 2 건너뜀, sudo apt install ffmpeg)"
+    command -v node &>/dev/null    || { echo "Node.js 미설치."; exit 1; }
+    command -v setpriv &>/dev/null || { echo "setpriv 미설치 (util-linux 포함, 필수)."; exit 1; }
+    command -v ffmpeg &>/dev/null  || warn "ffmpeg 미설치 (Case 2 건너뜀, sudo apt install ffmpeg)"
 
     local gpu_count
     gpu_count=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | wc -l)
@@ -166,6 +167,29 @@ check_prerequisites() {
         fi
     fi
     log "test_video.mp4 확인: $(md5sum "$WORKLOAD_DIR/test_video.mp4" | cut -c1-8)... ($(du -h "$WORKLOAD_DIR/test_video.mp4" | cut -f1))"
+}
+
+########################################
+# slice 상태 리셋 — 이전 run 잔재 제거
+#
+# systemd-run이 남긴 자식 scope + 활성 하위 컨트롤러가 있으면 cgroup v2의
+# internal-node 규칙 때문에 slice에 프로세스를 직접 붙일 수 없다 (run2에서
+# Node.js가 소리 없이 cgroup 밖에서 실행된 원인). 실험 시작 전 항상 리셋한다.
+########################################
+reset_slice() {
+    local cg="$CGROUP_ROOT/$1"
+    [ -d "$cg" ] || return 0
+    local child
+    for child in "$cg"/*/; do
+        [ -d "$child" ] || continue
+        if [ -f "$child/cgroup.procs" ]; then
+            while read -r pid; do kill -9 "$pid" 2>/dev/null || true; done < "$child/cgroup.procs" 2>/dev/null
+        fi
+        sleep 0.3
+        rmdir "$child" 2>/dev/null || warn "자식 cgroup 제거 실패: $child (프로세스 잔존?)"
+    done
+    # 하위 컨트롤러 비활성화 → 프로세스를 직접 붙일 수 있는 leaf 상태로 복귀
+    echo "-cpuset -memory -cpu -io" > "$cg/cgroup.subtree_control" 2>/dev/null || true
 }
 
 ########################################
@@ -199,39 +223,49 @@ start_ai_workload() {
     local slice=$3
     local duration=$4
     local pid_var=$5
+    local cg="$CGROUP_ROOT/$slice"
     local log_file="$LOG_DIR/${workload_type}_gpu${gpu_id}_${slice}.log"
 
+    local inner=""
     case "$workload_type" in
         yolo_medium)
-            timeout $((duration + 10)) \
-                systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
-                bash -c "
-                    export CUDA_VISIBLE_DEVICES=$gpu_id
-                    source $WORKLOAD_DIR/yolo_venv/bin/activate
-                    cd $WORKLOAD_DIR
-                    END_TIME=\$((SECONDS + $duration - 5))
-                    while [ \$SECONDS -lt \$END_TIME ]; do
-                        yolo predict model=yolov8m.pt source=test_video.mp4 device=0 verbose=False 2>&1 || true
-                    done
-                " > "$log_file" 2>&1 &
+            inner="cd $WORKLOAD_DIR && source yolo_venv/bin/activate && \
+END_TIME=\$((SECONDS + $duration - 5)); \
+while [ \$SECONDS -lt \$END_TIME ]; do \
+  yolo predict model=yolov8m.pt source=test_video.mp4 device=0 verbose=False || true; \
+done"
             ;;
-        resnet18|gpt2)
-            local script=""
-            [ "$workload_type" = "resnet18" ] && script="$WORKLOAD_DIR/resnet18_inference.py"
-            [ "$workload_type" = "gpt2" ]     && script="$WORKLOAD_DIR/gpt2_inference.py"
-            timeout $((duration + 10)) \
-                systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
-                bash -c "
-                    export CUDA_VISIBLE_DEVICES=$gpu_id
-                    source $WORKLOAD_DIR/yolo_venv/bin/activate
-                    python3 $script --duration $duration 2>&1
-                " > "$log_file" 2>&1 &
+        resnet18)
+            inner="source $WORKLOAD_DIR/yolo_venv/bin/activate && python3 $WORKLOAD_DIR/resnet18_inference.py --duration $duration"
+            ;;
+        gpt2)
+            inner="source $WORKLOAD_DIR/yolo_venv/bin/activate && python3 $WORKLOAD_DIR/gpt2_inference.py --duration $duration"
             ;;
         *)
             warn "알 수 없는 워크로드: $workload_type"
             return
             ;;
     esac
+
+    # systemd-run 대신 cgroup.procs 직접 등록.
+    # systemd scope와 raw cgroup을 혼용하면 이전 run의 상태에 따라
+    # "Job failed"(run1의 ffmpeg) 또는 attach 실패(run2의 Node.js/GPT2)가
+    # 비결정적으로 발생 — 전 워크로드를 직접 등록으로 통일한다.
+    # sudo -u로 uid를 되돌려도 cgroup 소속은 유지된다 (v2 상속).
+    # 주의: 서브셸 안에서 $$는 메인 스크립트 PID를 반환한다 (bash 표준 동작).
+    # $$를 쓰면 실험 스크립트 전체가 slice로 이동해 이후 모든 phase가 오염된다
+    # (run1에서 실제 발생). 반드시 $BASHPID(서브셸 자신)를 사용한다.
+    # setpriv: sudo와 달리 PAM을 타지 않아 cgroup 소속이 절대 바뀌지 않는다.
+    ( if ! echo $BASHPID > "$cg/cgroup.procs" 2>/dev/null; then
+          echo "[FATAL] cgroup attach 실패: $cg — reset_slice 미실행 또는 슬라이스 오염"
+          exit 1
+      fi
+      exec timeout $((duration + 10)) \
+          setpriv --reuid=$REAL_UID --regid=$REAL_GID --init-groups \
+          env HOME="/home/$REAL_USER" \
+              CUDA_VISIBLE_DEVICES=$gpu_id PYTHONUNBUFFERED=1 \
+          bash -c "$inner"
+    ) > "$log_file" 2>&1 &
 
     eval "${pid_var}=$!"
     log "${workload_type} 시작 (PID: ${!pid_var}, GPU${gpu_id}, ${slice})"
@@ -243,12 +277,19 @@ start_ai_workload() {
 start_nodejs_3way() {
     local duration=$1
 
-    # 서버를 work.slice에서 실행
+    # 서버를 work.slice에서 실행 — attach 실패를 절대 조용히 넘기지 않는다
+    # (run2에서 || true 때문에 Node.js가 cgroup 밖에서 돌아 사용량이 통째로 누락됨)
     cd "$WORKLOAD_DIR"
-    ( echo $$ > "$WORK_CGROUP/cgroup.procs" 2>/dev/null || true
-      exec node "server_heavy.js" 2>/dev/null ) &
+    ( if ! echo $BASHPID > "$WORK_CGROUP/cgroup.procs" 2>/dev/null; then
+          echo "[FATAL] work.slice attach 실패 — Node.js가 cgroup 밖에서 실행됨"
+          exit 1
+      fi
+      exec node "server_heavy.js" ) > "$LOG_DIR/nodejs_work.log" 2>&1 &
     NODE_PID=$!
     sleep 2
+    if ! kill -0 $NODE_PID 2>/dev/null; then
+        warn "Node.js 시작 실패! $LOG_DIR/nodejs_work.log 확인"
+    fi
     log "Node.js 서버 시작 (PID: $NODE_PID, work.slice)"
 
     # Heavy 부하 (curl은 cgroup 밖에서 실행 — HTTP 클라이언트)
@@ -281,10 +322,13 @@ start_ffmpeg_3way() {
     # systemd-run --slice는 (1) 프로세스가 직접 등록된 raw cgroup과 충돌해
     # "Job failed"로 죽고 (2) slice 재생성 시 cpuset 제한을 리셋한다 (run1에서
     # 실제 발생: work.slice 실패 + work2.slice 891% CPU).
-    # → Node.js와 동일하게 cgroup.procs 직접 등록 방식 사용.
+    # → cgroup.procs 직접 등록 ($BASHPID — $$ 금지) 방식 사용.
     # ffmpeg_encode.py는 표준 라이브러리만 사용하므로 venv 불필요.
-    ( echo $$ > "$cg/cgroup.procs" 2>/dev/null || true
-      exec timeout $((duration + 10)) \
+    ( if ! echo $BASHPID > "$cg/cgroup.procs" 2>/dev/null; then
+          echo "[FATAL] cgroup attach 실패: $cg"
+          exit 1
+      fi
+      exec timeout $((duration + 10)) env PYTHONUNBUFFERED=1 \
           python3 "$WORKLOAD_DIR/ffmpeg_encode.py" --duration $duration
     ) > "$log_file" 2>&1 &
     WL_C_PID=$!
@@ -339,6 +383,75 @@ cleanup() { stop_workloads; }
 trap cleanup EXIT
 
 ########################################
+# 스모크 테스트 — 본 실험 전 각 워크로드 시험 가동 (~2분)
+# 하나라도 실패하면 즉시 중단 → 30분짜리 무효 run 방지
+########################################
+smoke_check() {  # $1=로그파일 $2=성공마커 $3=이름
+    if grep -q "FileNotFoundError\|Traceback\|FATAL\|Job failed" "$1" 2>/dev/null; then
+        warn "  ✗ $3 실패 (에러 발견) → $1"
+        return 1
+    fi
+    if ! grep -q "$2" "$1" 2>/dev/null; then
+        warn "  ✗ $3 실패 (성공 마커 '$2' 없음) → $1"
+        return 1
+    fi
+    log "  ✓ $3 OK"
+    return 0
+}
+
+smoke_test() {
+    phase "Phase S: 워크로드 스모크 테스트 (~2분) — 실패 시 즉시 중단"
+    local fail=0
+
+    info "S1: YOLO (GPU0, yolo.slice, 20s)"
+    start_ai_workload "yolo_medium" 0 "yolo.slice" 20 "WL_A_PID"
+    sleep 20; stop_workloads
+    smoke_check "$LOG_DIR/yolo_medium_gpu0_yolo.slice.log" "Ultralytics" "YOLO" || fail=1
+
+    info "S2: ResNet (GPU0, yolo.slice, 15s)"
+    start_ai_workload "resnet18" 0 "yolo.slice" 15 "WL_A_PID"
+    sleep 15; stop_workloads
+    smoke_check "$LOG_DIR/resnet18_gpu0_yolo.slice.log" "\[ResNet18\]" "ResNet" || fail=1
+
+    info "S3: GPT2 (GPU0, yolo.slice, 25s — 모델 로드 포함)"
+    start_ai_workload "gpt2" 0 "yolo.slice" 25 "WL_A_PID"
+    sleep 25; stop_workloads
+    smoke_check "$LOG_DIR/gpt2_gpu0_yolo.slice.log" "\[GPT-2\]" "GPT2" || fail=1
+
+    # 주의: cgroupfs 파일은 stat 크기가 항상 0이라 [ -s ] 테스트 불가 → cat으로 판정
+    info "S4: Node.js (work.slice, 12s)"
+    start_nodejs_3way 12
+    sleep 5
+    if curl -s --max-time 3 "http://localhost:3000/" >/dev/null 2>&1 \
+       && [ -n "$(cat "$WORK_CGROUP/cgroup.procs" 2>/dev/null)" ]; then
+        log "  ✓ Node.js OK (응답 + work.slice 등록 확인)"
+    else
+        warn "  ✗ Node.js 실패 (응답 없음 또는 work.slice 미등록) → $LOG_DIR/nodejs_work.log"
+        fail=1
+    fi
+    sleep 7; stop_workloads
+
+    info "S5: ffmpeg (work.slice, 12s)"
+    start_ffmpeg_3way 12 "work.slice" "smoke"
+    sleep 3
+    [ -n "$(cat "$WORK_CGROUP/cgroup.procs" 2>/dev/null)" ] || { warn "  ✗ ffmpeg work.slice 미등록"; fail=1; }
+    sleep 9; stop_workloads
+    smoke_check "$LOG_DIR/smoke_ffmpeg_work.log" "\[ffmpeg\] 시작" "ffmpeg" || fail=1
+
+    if [ "$fail" -ne 0 ]; then
+        echo ""
+        echo -e "${RED}========================================${NC}"
+        echo -e "${RED}스모크 테스트 실패 — 본 실험을 시작하지 않습니다.${NC}"
+        echo -e "${RED}위 로그를 확인하고 문제 해결 후 재실행하세요.${NC}"
+        echo -e "${RED}========================================${NC}"
+        exit 1
+    fi
+    log "스모크 테스트 전체 통과 — 본 실험 시작"
+    drop_caches
+    sleep $COOLDOWN
+}
+
+########################################
 # 메인
 ########################################
 phase "3-way 동시실행 실험 — Run ${RUN_NUM}"
@@ -348,6 +461,13 @@ echo -e "${MAGENTA}cgroup: yolo.slice(0-1) | nodejs.slice(2-3) | work.slice(4-5)
 echo -e "${MAGENTA}출력: $LOG_DIR${NC}"
 
 check_prerequisites
+
+# 이전 run 잔재(systemd scope 자식, 하위 컨트롤러) 정리 — 반드시 setup 전에
+reset_slice "yolo.slice"
+reset_slice "nodejs.slice"
+reset_slice "work.slice"
+reset_slice "work2.slice"
+
 set_cpu_fixed
 setup_work_cgroup
 setup_work2_cgroup
@@ -381,6 +501,9 @@ Purpose:
 Hardware: Alienware Aurora R12 (i7-11700F 8c/16t, RTX 3060 x2, 32GB DDR4)
 EOF
 chown $REAL_UID:$REAL_GID "$LOG_DIR/config.txt"
+
+# 본 실험 전 스모크 테스트 — 실패 시 여기서 중단 (무효 run 방지)
+smoke_test
 
 EXPERIMENT_START=$SECONDS
 
