@@ -97,10 +97,11 @@ setup_work_cgroup() {
     # subtree_control 활성화 (부모에서)
     echo "+cpuset +memory +cpu +io" > "$parent_cgroup/cgroup.subtree_control" 2>/dev/null || true
 
-    # work.slice 설정: cpuset 4-5 (2코어), 4GB
+    # work.slice 설정: cpuset 4-5 (2코어), 4GB, cpu.max 200% (setup_cgroups.sh와 동일)
     echo "0"         > "$WORK_CGROUP/cpuset.mems"   2>/dev/null || warn "cpuset.mems 설정 실패"
     echo "4-5"       > "$WORK_CGROUP/cpuset.cpus"   2>/dev/null || warn "cpuset.cpus 설정 실패"
     echo "4294967296" > "$WORK_CGROUP/memory.max"   2>/dev/null || warn "memory.max 설정 실패 (4GB)"
+    echo "200000 100000" > "$WORK_CGROUP/cpu.max"   2>/dev/null || warn "cpu.max 설정 실패"
     # memory.max = 4 * 1024^3 = 4294967296
 
     sleep 1
@@ -120,10 +121,11 @@ setup_work2_cgroup() {
         log "work2.slice 생성: $WORK2_CGROUP"
     fi
 
-    # work2.slice 설정: cpuset 6-7 (2코어), 4GB
+    # work2.slice 설정: cpuset 6-7 (2코어), 4GB, cpu.max 200% (setup_cgroups.sh와 동일)
     echo "0"          > "$WORK2_CGROUP/cpuset.mems" 2>/dev/null || warn "cpuset.mems 설정 실패"
     echo "6-7"        > "$WORK2_CGROUP/cpuset.cpus" 2>/dev/null || warn "cpuset.cpus 설정 실패"
     echo "4294967296" > "$WORK2_CGROUP/memory.max"  2>/dev/null || warn "memory.max 설정 실패 (4GB)"
+    echo "200000 100000" > "$WORK2_CGROUP/cpu.max"  2>/dev/null || warn "cpu.max 설정 실패"
 
     sleep 1
     log "work2.slice 설정 완료:"
@@ -148,6 +150,22 @@ check_prerequisites() {
         exit 1
     fi
     log "GPU ${gpu_count}장 확인 완료"
+
+    # YOLO 테스트 비디오 확인 (*.mp4는 .gitignore라 clone에 미포함 — 없으면 YOLO가
+    # FileNotFoundError 무한 루프에 빠져 GPU가 놀게 됨. run1에서 실제 발생한 문제)
+    if [ ! -f "$WORKLOAD_DIR/test_video.mp4" ]; then
+        warn "test_video.mp4 없음 — 합성 비디오 자동 생성 (기존 실험 원본이 있으면 교체 권장)"
+        if command -v ffmpeg &>/dev/null; then
+            ffmpeg -y -f lavfi -i "testsrc=duration=60:size=1280x720:rate=30" \
+                -pix_fmt yuv420p "$WORKLOAD_DIR/test_video.mp4" &>/dev/null
+            chown $REAL_UID:$REAL_GID "$WORKLOAD_DIR/test_video.mp4" 2>/dev/null || true
+            log "합성 test_video.mp4 생성 완료 (1280x720@30fps, 60s testsrc)"
+        else
+            echo "ERROR: test_video.mp4 없음 + ffmpeg 미설치 → YOLO 실행 불가"
+            exit 1
+        fi
+    fi
+    log "test_video.mp4 확인: $(md5sum "$WORKLOAD_DIR/test_video.mp4" | cut -c1-8)... ($(du -h "$WORKLOAD_DIR/test_video.mp4" | cut -f1))"
 }
 
 ########################################
@@ -256,14 +274,19 @@ start_nodejs_3way() {
 start_ffmpeg_3way() {
     local duration=$1
     local slice=${2:-work.slice}    # 기본 work.slice, 4-way에서는 work2.slice
-    local log_file="$LOG_DIR/ffmpeg_${slice%.slice}.log"
+    local prefix=${3:-ffmpeg}       # 로그 파일명 충돌 방지용 phase 프리픽스
+    local cg="$CGROUP_ROOT/$slice"
+    local log_file="$LOG_DIR/${prefix}_ffmpeg_${slice%.slice}.log"
 
-    timeout $((duration + 10)) \
-        systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
-        bash -c "
-            source $WORKLOAD_DIR/yolo_venv/bin/activate
-            python3 $WORKLOAD_DIR/ffmpeg_encode.py --duration $duration 2>&1
-        " > "$log_file" 2>&1 &
+    # systemd-run --slice는 (1) 프로세스가 직접 등록된 raw cgroup과 충돌해
+    # "Job failed"로 죽고 (2) slice 재생성 시 cpuset 제한을 리셋한다 (run1에서
+    # 실제 발생: work.slice 실패 + work2.slice 891% CPU).
+    # → Node.js와 동일하게 cgroup.procs 직접 등록 방식 사용.
+    # ffmpeg_encode.py는 표준 라이브러리만 사용하므로 venv 불필요.
+    ( echo $$ > "$cg/cgroup.procs" 2>/dev/null || true
+      exec timeout $((duration + 10)) \
+          python3 "$WORKLOAD_DIR/ffmpeg_encode.py" --duration $duration
+    ) > "$log_file" 2>&1 &
     WL_C_PID=$!
     log "ffmpeg 시작 (PID: $WL_C_PID, $slice, log: $log_file)"
 }
@@ -409,7 +432,7 @@ if command -v ffmpeg &>/dev/null; then
     info "Case 2/3 검증용 solo 기준값 (동일 run 내 확보)"
     start_loggers "solo_ffmpeg" $WORKLOAD_DURATION
     sleep 2
-    start_ffmpeg_3way $WORKLOAD_DURATION "work.slice"
+    start_ffmpeg_3way $WORKLOAD_DURATION "work.slice" "solo"
     wait_loggers; stop_workloads; drop_caches
     sleep $COOLDOWN
 fi
@@ -451,7 +474,7 @@ if command -v ffmpeg &>/dev/null; then
     # Workload B: GPT2 → GPU1, nodejs.slice
     start_ai_workload "gpt2"        1 "nodejs.slice"  $WORKLOAD_DURATION "WL_B_PID"
     # Workload C: ffmpeg → CPU, work.slice
-    start_ffmpeg_3way $WORKLOAD_DURATION
+    start_ffmpeg_3way $WORKLOAD_DURATION "work.slice" "case2"
 
     wait_loggers
     stop_workloads
@@ -481,7 +504,7 @@ if command -v ffmpeg &>/dev/null; then
     start_ai_workload "gpt2"        1 "nodejs.slice"  $WORKLOAD_DURATION "WL_B_PID"
     # Workload C: Node.js → CPU, work.slice (위에서 시작)
     # Workload D: ffmpeg → CPU, work2.slice
-    start_ffmpeg_3way $WORKLOAD_DURATION "work2.slice"
+    start_ffmpeg_3way $WORKLOAD_DURATION "work2.slice" "case3"
 
     wait_loggers
     stop_workloads

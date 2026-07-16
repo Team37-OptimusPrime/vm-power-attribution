@@ -98,6 +98,15 @@ check_prerequisites() {
     [ "$gpu_count" -lt 1 ] && { echo "ERROR: GPU 1장 이상 필요 (C3/C4)"; exit 1; }
     log "GPU ${gpu_count}장 확인"
 
+    # YOLO 테스트 비디오 확인 (*.mp4는 .gitignore라 clone에 미포함)
+    if [ ! -f "$WORKLOAD_DIR/test_video.mp4" ]; then
+        warn "test_video.mp4 없음 — 합성 비디오 자동 생성 (기존 실험 원본이 있으면 교체 권장)"
+        ffmpeg -y -f lavfi -i "testsrc=duration=60:size=1280x720:rate=30" \
+            -pix_fmt yuv420p "$WORKLOAD_DIR/test_video.mp4" &>/dev/null
+        chown $REAL_UID:$REAL_GID "$WORKLOAD_DIR/test_video.mp4" 2>/dev/null || true
+    fi
+    log "test_video.mp4 확인: $(md5sum "$WORKLOAD_DIR/test_video.mp4" | cut -c1-8)... ($(du -h "$WORKLOAD_DIR/test_video.mp4" | cut -f1))"
+
     # fio 테스트 파일 사전 생성 (측정 중 파일 레이아웃 I/O 방지)
     if [ ! -f "$FIO_FILE" ]; then
         log "fio 테스트 파일 사전 생성 (2GB)..."
