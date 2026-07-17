@@ -122,7 +122,17 @@ check_prerequisites() {
 ########################################
 reset_slice() {
     local cg="$CGROUP_ROOT/$1"
-    [ -d "$cg" ] || return 0
+    # systemd 유닛으로 등록돼 있으면 내림 — 주의: stop 시 systemd가 cgroup 디렉토리를
+    # 함께 제거한다 (asym 재실행에서 실증). 직후 raw 디렉토리로 재생성하면
+    # systemd 관리에서 완전히 벗어나 mid-run GC(빈 slice 제거)도 사라진다.
+    systemctl stop "$1" 2>/dev/null || true
+    sleep 0.2
+    echo "+cpuset +memory +cpu +io" > "$CGROUP_ROOT/cgroup.subtree_control" 2>/dev/null || true
+    mkdir -p "$cg" 2>/dev/null || true
+    if [ ! -d "$cg" ]; then
+        echo -e "${RED}[FATAL] cgroup 재생성 실패: $cg${NC}"
+        exit 1
+    fi
     local child
     for child in "$cg"/*/; do
         [ -d "$child" ] || continue
@@ -132,9 +142,7 @@ reset_slice() {
         sleep 0.3
         rmdir "$child" 2>/dev/null || warn "자식 cgroup 제거 실패: $child"
     done
-    # systemd가 이 slice를 유닛으로 알고 있으면 명시적으로 내려서 재간섭 차단
-    systemctl stop "$1" 2>/dev/null || true
-    # 켜져 있는 모든 하위 컨트롤러 해제 (pids 포함 — 하드코딩 목록은 pids를 놓쳤었음)
+    # 켜져 있는 모든 하위 컨트롤러 해제 (pids 포함)
     local c
     for c in $(cat "$cg/cgroup.subtree_control" 2>/dev/null); do
         echo "-$c" > "$cg/cgroup.subtree_control" 2>/dev/null || true
