@@ -394,6 +394,8 @@ stop_workloads() {
     pkill -f "resnet18_inference" 2>/dev/null || true
     pkill -f "gpt2_inference"     2>/dev/null || true
     pkill -f "yolo predict"       2>/dev/null || true
+    pkill -f "ffmpeg_encode"      2>/dev/null || true
+    pkill -f "ffmpeg.*testsrc"    2>/dev/null || true
     sleep 2
 }
 
@@ -610,6 +612,47 @@ for ratio_spec in "${RATIOS[@]}"; do
     sleep $COOLDOWN
     PHASE_NUM=$((PHASE_NUM + 1))
 done
+
+########################################
+# (옵션) ffmpeg 할당 스케일링 소실험 — WITH_FFMPEG_SCALE=1 일 때만
+#
+# 목적: 할당이 binding constraint가 되는 멀티스레드 워크로드의 대조군 확보.
+#   demand-bound(YOLO/Node: 할당 늘려도 에너지 불변)와 달리 ffmpeg(x264)는
+#   코어 수에 스케일하므로 할당에 따라 전력·처리량이 변한다
+#   → "할당 기반 과금은 어느 방향으로도 에너지를 반영하지 못함" 논증 완성.
+# 기존 phase들 뒤에 append되므로 run 간 비교성에 영향 없음.
+########################################
+if [ "${WITH_FFMPEG_SCALE:-0}" = "1" ]; then
+    phase "=== (옵션) ffmpeg 할당 스케일링: 1/2/5코어 solo ==="
+    command -v ffmpeg &>/dev/null || { warn "ffmpeg 미설치 — 스케일링 소실험 건너뜀"; }
+
+    start_ffmpeg_scale() {   # $1=duration
+        local duration=$1
+        clear_subtree "$NODEJS_CGROUP"
+        ( if ! attach_self "$NODEJS_CGROUP"; then
+              echo "[FATAL] nodejs.slice attach 실패 (ffmpeg scale)"
+              exit 1
+          fi
+          exec timeout $((duration + 10)) env PYTHONUNBUFFERED=1               python3 "$WORKLOAD_DIR/ffmpeg_encode.py" --duration $duration
+        ) > "$LOG_DIR/ffmpeg_scale_current.log" 2>&1 &
+        WL_B_PID=$!
+        log "ffmpeg 시작 (PID: $WL_B_PID, nodejs.slice)"
+    }
+
+    # (라벨, nonai_cpuset, nonai_mem_gb) — AI측은 0-1/4GB 고정(빈 상태)
+    for spec in "1c:2:2" "2c:2-3:4" "5c:2-6:10"; do
+        IFS=':' read -r sl_label sl_cpuset sl_mem <<< "$spec"
+        phase "ffmpeg scale [${sl_label}] cpuset=${sl_cpuset} - ${WORKLOAD_DURATION}s"
+        configure_cgroup_ratio "0-1" 4 "$sl_cpuset" "$sl_mem"
+        start_loggers "ffmpeg_scale_${sl_label}" $WORKLOAD_DURATION
+        sleep 2
+        start_ffmpeg_scale $WORKLOAD_DURATION
+        wait_loggers; stop_workloads
+        cp "$LOG_DIR/ffmpeg_scale_current.log" "$LOG_DIR/ffmpeg_scale_${sl_label}.log" 2>/dev/null || true
+        drop_caches; sleep $COOLDOWN
+    done
+    echo "ffmpeg_scale: 1c/2c/5c phases appended (WITH_FFMPEG_SCALE=1)" >> "$LOG_DIR/config.txt"
+fi
 
 ########################################
 # 완료
