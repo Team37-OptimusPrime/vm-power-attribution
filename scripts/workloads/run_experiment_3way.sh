@@ -259,7 +259,7 @@ done"
     # $$를 쓰면 실험 스크립트 전체가 slice로 이동해 이후 모든 phase가 오염된다
     # (run1에서 실제 발생). 반드시 $BASHPID(서브셸 자신)를 사용한다.
     # setpriv: sudo와 달리 PAM을 타지 않아 cgroup 소속이 절대 바뀌지 않는다.
-    ( if ! echo $BASHPID > "$cg/cgroup.procs" 2>/dev/null; then
+    ( if ! echo $BASHPID > "$cg/cgroup.procs"; then
           echo "[FATAL] cgroup attach 실패: $cg — reset_slice 미실행 또는 슬라이스 오염"
           exit 1
       fi
@@ -283,7 +283,7 @@ start_nodejs_3way() {
     # 서버를 work.slice에서 실행 — attach 실패를 절대 조용히 넘기지 않는다
     # (run2에서 || true 때문에 Node.js가 cgroup 밖에서 돌아 사용량이 통째로 누락됨)
     cd "$WORKLOAD_DIR"
-    ( if ! echo $BASHPID > "$WORK_CGROUP/cgroup.procs" 2>/dev/null; then
+    ( if ! echo $BASHPID > "$WORK_CGROUP/cgroup.procs"; then
           echo "[FATAL] work.slice attach 실패 — Node.js가 cgroup 밖에서 실행됨"
           exit 1
       fi
@@ -327,7 +327,7 @@ start_ffmpeg_3way() {
     # 실제 발생: work.slice 실패 + work2.slice 891% CPU).
     # → cgroup.procs 직접 등록 ($BASHPID — $$ 금지) 방식 사용.
     # ffmpeg_encode.py는 표준 라이브러리만 사용하므로 venv 불필요.
-    ( if ! echo $BASHPID > "$cg/cgroup.procs" 2>/dev/null; then
+    ( if ! echo $BASHPID > "$cg/cgroup.procs"; then
           echo "[FATAL] cgroup attach 실패: $cg"
           exit 1
       fi

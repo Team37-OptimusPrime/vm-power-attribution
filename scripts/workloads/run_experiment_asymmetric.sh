@@ -251,7 +251,7 @@ done"
     # cgroup.procs 직접 등록 ($BASHPID — $$는 메인 스크립트 PID라 절대 금지).
     # systemd-run --slice는 raw cgroup과 충돌하거나 cpuset/cpu.max를 리셋해
     # 비율 강제가 무효화된다 (3-way run1/run2에서 실증된 계열).
-    ( if ! echo $BASHPID > "$cg/cgroup.procs" 2>/dev/null; then
+    ( if ! echo $BASHPID > "$cg/cgroup.procs"; then
           echo "[FATAL] cgroup attach 실패: $cg"
           exit 1
       fi
@@ -272,15 +272,22 @@ done"
 start_nodejs_server() {
     cd "$WORKLOAD_DIR"
     # $BASHPID 필수 — $$는 메인 스크립트를 slice로 옮겨 모든 후속 phase를 오염시킴
-    ( if ! echo $BASHPID > "$NODEJS_CGROUP/cgroup.procs" 2>/dev/null; then
+    ( if ! echo $BASHPID > "$NODEJS_CGROUP/cgroup.procs"; then
           echo "[FATAL] nodejs.slice attach 실패 — Node.js가 cgroup 밖에서 실행됨"
+          echo "-- 진단: subtree_control=[$(cat $NODEJS_CGROUP/cgroup.subtree_control 2>&1)]"
+          echo "-- cpus.effective=[$(cat $NODEJS_CGROUP/cpuset.cpus.effective 2>&1)]"
+          echo "-- type=[$(cat $NODEJS_CGROUP/cgroup.type 2>&1)] procs=[$(cat $NODEJS_CGROUP/cgroup.procs 2>&1 | tr '\n' ' ')]"
+          echo "-- children=[$(ls -d $NODEJS_CGROUP/*/ 2>/dev/null | tr '\n' ' ')]"
           exit 1
       fi
       exec node "server_heavy.js" ) > "$LOG_DIR/nodejs_server.log" 2>&1 &
     NODE_PID=$!
     sleep 2
     if ! kill -0 $NODE_PID 2>/dev/null; then
-        warn "Node.js 시작 실패! $LOG_DIR/nodejs_server.log 확인"
+        echo -e "${RED}[ABORT] Node.js 시작 실패 — 무효 데이터 방지를 위해 실험 중단${NC}"
+        echo -e "${RED}로그 확인: $LOG_DIR/nodejs_server.log${NC}"
+        cat "$LOG_DIR/nodejs_server.log"
+        exit 1
     fi
     log "Node.js 서버 시작 (PID: $NODE_PID, nodejs.slice)"
 }

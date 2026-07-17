@@ -200,7 +200,7 @@ run_in_cgroup() {
     local cg="$CGROUP_ROOT/$slice"
 
     if [ "$as_user" = "1" ]; then
-        ( if ! echo $BASHPID > "$cg/cgroup.procs" 2>/dev/null; then
+        ( if ! echo $BASHPID > "$cg/cgroup.procs"; then
               echo "[FATAL] cgroup attach 실패: $cg"
               exit 1
           fi
@@ -209,7 +209,7 @@ run_in_cgroup() {
               env HOME="/home/$REAL_USER" PYTHONUNBUFFERED=1 "$@"
         ) > "$log_file" 2>&1 &
     else
-        ( if ! echo $BASHPID > "$cg/cgroup.procs" 2>/dev/null; then
+        ( if ! echo $BASHPID > "$cg/cgroup.procs"; then
               echo "[FATAL] cgroup attach 실패: $cg"
               exit 1
           fi
@@ -305,8 +305,12 @@ start_fio_bursty() {
 start_nodejs() {
     local duration=$1
     cd "$WORKLOAD_DIR"
-    ( if ! echo $BASHPID > "$NODEJS_CGROUP/cgroup.procs" 2>/dev/null; then
+    ( if ! echo $BASHPID > "$NODEJS_CGROUP/cgroup.procs"; then
           echo "[FATAL] nodejs.slice attach 실패 — Node.js가 cgroup 밖에서 실행됨"
+          echo "-- 진단: subtree_control=[$(cat $NODEJS_CGROUP/cgroup.subtree_control 2>&1)]"
+          echo "-- cpus.effective=[$(cat $NODEJS_CGROUP/cpuset.cpus.effective 2>&1)]"
+          echo "-- type=[$(cat $NODEJS_CGROUP/cgroup.type 2>&1)] procs=[$(cat $NODEJS_CGROUP/cgroup.procs 2>&1 | tr '\n' ' ')]"
+          echo "-- children=[$(ls -d $NODEJS_CGROUP/*/ 2>/dev/null | tr '\n' ' ')]"
           exit 1
       fi
       exec node "server_heavy.js" ) > "$LOG_DIR/nodejs_server.log" 2>&1 &
