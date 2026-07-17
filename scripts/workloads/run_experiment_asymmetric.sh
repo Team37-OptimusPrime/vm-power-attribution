@@ -95,13 +95,44 @@ check_prerequisites() {
     log "사전 요구사항 확인..."
     [ -d "$YOLO_CGROUP" ]   || { echo "yolo.slice 없음. setup_cgroups.sh 먼저 실행."; exit 1; }
     [ -d "$NODEJS_CGROUP" ] || { echo "nodejs.slice 없음. setup_cgroups.sh 먼저 실행."; exit 1; }
-    command -v node &>/dev/null  || { echo "Node.js 미설치."; exit 1; }
+    command -v node &>/dev/null    || { echo "Node.js 미설치."; exit 1; }
+    command -v setpriv &>/dev/null || { echo "setpriv 미설치 (util-linux 포함, 필수)."; exit 1; }
+    ( cd "$WORKLOAD_DIR" && node -e "require('express')" ) 2>/dev/null || {
+        echo "ERROR: express 미설치 → cd $WORKLOAD_DIR && npm install express"; exit 1; }
     command -v ffmpeg &>/dev/null || warn "ffmpeg 미설치 (필요시 sudo apt install ffmpeg)"
 
     local gpu_count
     gpu_count=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | wc -l)
     [ "$gpu_count" -ge 2 ] || warn "GPU ${gpu_count}장 감지 (AI+AI에는 2장 필요)"
     log "GPU ${gpu_count}장 확인 완료"
+
+    # YOLO 테스트 비디오 (*.mp4는 gitignore — 없으면 YOLO가 에러 루프에 빠짐)
+    if [ ! -f "$WORKLOAD_DIR/test_video.mp4" ]; then
+        warn "test_video.mp4 없음 — 합성 비디오 자동 생성"
+        ffmpeg -y -f lavfi -i "testsrc=duration=60:size=1280x720:rate=30" \
+            -pix_fmt yuv420p "$WORKLOAD_DIR/test_video.mp4" &>/dev/null
+        chown $REAL_UID:$REAL_GID "$WORKLOAD_DIR/test_video.mp4" 2>/dev/null || true
+    fi
+    log "test_video.mp4 확인: $(md5sum "$WORKLOAD_DIR/test_video.mp4" | cut -c1-8)..."
+}
+
+########################################
+# slice 상태 리셋 — systemd scope 잔재/하위 컨트롤러 제거
+# (남아 있으면 cgroup v2 internal-node 규칙 때문에 직접 등록이 실패)
+########################################
+reset_slice() {
+    local cg="$CGROUP_ROOT/$1"
+    [ -d "$cg" ] || return 0
+    local child
+    for child in "$cg"/*/; do
+        [ -d "$child" ] || continue
+        if [ -f "$child/cgroup.procs" ]; then
+            while read -r pid; do kill -9 "$pid" 2>/dev/null || true; done < "$child/cgroup.procs" 2>/dev/null
+        fi
+        sleep 0.3
+        rmdir "$child" 2>/dev/null || warn "자식 cgroup 제거 실패: $child"
+    done
+    echo "-cpuset -memory -cpu -io" > "$cg/cgroup.subtree_control" 2>/dev/null || true
 }
 
 ########################################
@@ -126,6 +157,20 @@ set_cpu_fixed() {
 # $3: nonai_cpuset (예: "3")
 # $4: nonai_mem_gb
 ########################################
+# cpuset 표기("0-4", "3", "1-3")에서 코어 수 계산
+count_cores() {
+    local spec=$1 n=0 part
+    local IFS=','
+    for part in $spec; do
+        if [[ "$part" == *-* ]]; then
+            n=$((n + ${part#*-} - ${part%-*} + 1))
+        else
+            n=$((n + 1))
+        fi
+    done
+    echo $n
+}
+
 configure_cgroup_ratio() {
     local ai_cpuset=$1
     local ai_mem_gb=$2
@@ -134,21 +179,34 @@ configure_cgroup_ratio() {
 
     local ai_mem_bytes=$(( ai_mem_gb * 1024 * 1024 * 1024 ))
     local nonai_mem_bytes=$(( nonai_mem_gb * 1024 * 1024 * 1024 ))
+    # cpu.max를 코어 수에 비례해 재설정 — setup_cgroups.sh가 걸어둔 200% 쿼터가
+    # 남아 있으면 cpuset을 5코어로 늘려도 2코어로 캡되어 비율 실험이 무효가 된다
+    local ai_quota=$(( $(count_cores "$ai_cpuset") * 100000 ))
+    local nonai_quota=$(( $(count_cores "$nonai_cpuset") * 100000 ))
 
     # yolo.slice (AI 워크로드)
     echo "$ai_cpuset" > "$YOLO_CGROUP/cpuset.cpus"   2>/dev/null || true
     echo "0"          > "$YOLO_CGROUP/cpuset.mems"   2>/dev/null || true
     echo "$ai_mem_bytes" > "$YOLO_CGROUP/memory.max" 2>/dev/null || true
+    echo "$ai_quota 100000" > "$YOLO_CGROUP/cpu.max" 2>/dev/null || true
 
     # nodejs.slice (Non-AI 워크로드)
     echo "$nonai_cpuset" > "$NODEJS_CGROUP/cpuset.cpus"    2>/dev/null || true
     echo "0"             > "$NODEJS_CGROUP/cpuset.mems"    2>/dev/null || true
     echo "$nonai_mem_bytes" > "$NODEJS_CGROUP/memory.max"  2>/dev/null || true
+    echo "$nonai_quota 100000" > "$NODEJS_CGROUP/cpu.max"  2>/dev/null || true
 
     sleep 1  # cgroup 적용 대기
-    log "cgroup 재설정: AI=cpuset${ai_cpuset}/${ai_mem_gb}GB, NonAI=cpuset${nonai_cpuset}/${nonai_mem_gb}GB"
-    log "  yolo.slice  cpuset.cpus = $(cat $YOLO_CGROUP/cpuset.cpus 2>/dev/null)"
-    log "  nodejs.slice cpuset.cpus = $(cat $NODEJS_CGROUP/cpuset.cpus 2>/dev/null)"
+
+    # 적용 검증 — 비율 강제가 이 실험의 핵심이므로 불일치 시 즉시 중단
+    local got_ai got_nonai
+    got_ai=$(cat "$YOLO_CGROUP/cpuset.cpus" 2>/dev/null)
+    got_nonai=$(cat "$NODEJS_CGROUP/cpuset.cpus" 2>/dev/null)
+    if [ "$got_ai" != "$ai_cpuset" ] || [ "$got_nonai" != "$nonai_cpuset" ]; then
+        echo -e "${RED}[FATAL] cpuset 적용 실패: AI '$got_ai'≠'$ai_cpuset' 또는 NonAI '$got_nonai'≠'$nonai_cpuset'${NC}"
+        exit 1
+    fi
+    log "cgroup 재설정: AI=cpuset${ai_cpuset}/${ai_mem_gb}GB/quota$(( ai_quota/1000 ))% | NonAI=cpuset${nonai_cpuset}/${nonai_mem_gb}GB/quota$(( nonai_quota/1000 ))%"
 }
 
 ########################################
@@ -168,37 +226,41 @@ start_ai_workload() {
     local pid_var=$5
     local log_file="$LOG_DIR/${workload_type}_gpu${gpu_id}_${slice}.log"
 
+    local cg="$CGROUP_ROOT/$slice"
+    local inner=""
     case "$workload_type" in
         yolo_medium)
-            timeout $((duration + 10)) \
-                systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
-                bash -c "
-                    export CUDA_VISIBLE_DEVICES=$gpu_id
-                    source $WORKLOAD_DIR/yolo_venv/bin/activate
-                    cd $WORKLOAD_DIR
-                    END_TIME=\$((SECONDS + $duration - 5))
-                    while [ \$SECONDS -lt \$END_TIME ]; do
-                        yolo predict model=yolov8m.pt source=test_video.mp4 device=0 verbose=False 2>&1 || true
-                    done
-                " > "$log_file" 2>&1 &
+            inner="cd $WORKLOAD_DIR && source yolo_venv/bin/activate && \
+END_TIME=\$((SECONDS + $duration - 5)); \
+while [ \$SECONDS -lt \$END_TIME ]; do \
+  yolo predict model=yolov8m.pt source=test_video.mp4 device=0 verbose=False || true; \
+done"
             ;;
-        resnet18|gpt2)
-            local script=""
-            [ "$workload_type" = "resnet18" ] && script="$WORKLOAD_DIR/resnet18_inference.py"
-            [ "$workload_type" = "gpt2" ]     && script="$WORKLOAD_DIR/gpt2_inference.py"
-            timeout $((duration + 10)) \
-                systemd-run --scope --slice=$slice --uid=$REAL_UID --gid=$REAL_GID \
-                bash -c "
-                    export CUDA_VISIBLE_DEVICES=$gpu_id
-                    source $WORKLOAD_DIR/yolo_venv/bin/activate
-                    python3 $script --duration $duration 2>&1
-                " > "$log_file" 2>&1 &
+        resnet18)
+            inner="source $WORKLOAD_DIR/yolo_venv/bin/activate && python3 $WORKLOAD_DIR/resnet18_inference.py --duration $duration"
+            ;;
+        gpt2)
+            inner="source $WORKLOAD_DIR/yolo_venv/bin/activate && python3 $WORKLOAD_DIR/gpt2_inference.py --duration $duration"
             ;;
         *)
             warn "알 수 없는 워크로드: $workload_type"
             return
             ;;
     esac
+
+    # cgroup.procs 직접 등록 ($BASHPID — $$는 메인 스크립트 PID라 절대 금지).
+    # systemd-run --slice는 raw cgroup과 충돌하거나 cpuset/cpu.max를 리셋해
+    # 비율 강제가 무효화된다 (3-way run1/run2에서 실증된 계열).
+    ( if ! echo $BASHPID > "$cg/cgroup.procs" 2>/dev/null; then
+          echo "[FATAL] cgroup attach 실패: $cg"
+          exit 1
+      fi
+      exec timeout $((duration + 10)) \
+          setpriv --reuid=$REAL_UID --regid=$REAL_GID --init-groups \
+          env HOME="/home/$REAL_USER" \
+              CUDA_VISIBLE_DEVICES=$gpu_id PYTHONUNBUFFERED=1 \
+          bash -c "$inner"
+    ) > "$log_file" 2>&1 &
 
     eval "${pid_var}=$!"
     log "${workload_type} 시작 (PID: ${!pid_var}, GPU${gpu_id}, ${slice})"
@@ -209,17 +271,24 @@ start_ai_workload() {
 ########################################
 start_nodejs_server() {
     cd "$WORKLOAD_DIR"
-    ( echo $$ > "$NODEJS_CGROUP/cgroup.procs" 2>/dev/null || true
-      exec node "server_heavy.js" 2>/dev/null ) &
+    # $BASHPID 필수 — $$는 메인 스크립트를 slice로 옮겨 모든 후속 phase를 오염시킴
+    ( if ! echo $BASHPID > "$NODEJS_CGROUP/cgroup.procs" 2>/dev/null; then
+          echo "[FATAL] nodejs.slice attach 실패 — Node.js가 cgroup 밖에서 실행됨"
+          exit 1
+      fi
+      exec node "server_heavy.js" ) > "$LOG_DIR/nodejs_server.log" 2>&1 &
     NODE_PID=$!
     sleep 2
-    log "Node.js 서버 시작 (PID: $NODE_PID)"
+    if ! kill -0 $NODE_PID 2>/dev/null; then
+        warn "Node.js 시작 실패! $LOG_DIR/nodejs_server.log 확인"
+    fi
+    log "Node.js 서버 시작 (PID: $NODE_PID, nodejs.slice)"
 }
 
 start_nodejs_heavy() {
     local duration=$1
-    ( echo $$ > "$NODEJS_CGROUP/cgroup.procs" 2>/dev/null || true
-      END_TIME=$((SECONDS + duration - 5))
+    # curl 부하는 외부 클라이언트 역할 — cgroup 밖에서 실행 (등록 금지)
+    ( END_TIME=$((SECONDS + duration - 5))
       for worker in {1..4}; do
         ( while [ $SECONDS -lt $END_TIME ]; do
             for i in {1..10}; do
@@ -284,6 +353,11 @@ echo -e "${MAGENTA}비율 3종: 1:1 (equal) / 2:1 (AI-heavy) / 1:2 (NonAI-heavy)
 echo -e "${MAGENTA}출력: $LOG_DIR${NC}"
 
 check_prerequisites
+
+# 이전 run 잔재(systemd scope 자식 등) 정리 — 직접 등록의 전제조건
+reset_slice "yolo.slice"
+reset_slice "nodejs.slice"
+
 set_cpu_fixed
 
 mkdir -p "$LOG_DIR"
@@ -294,13 +368,16 @@ cat > "$LOG_DIR/config.txt" << EOF
 ===== Asymmetric Resource Allocation Experiment =====
 Date: $(date)
 Run: ${RUN_NUM}
-Ratios: 1:1 / 2:1 / 1:2 (AI:NonAI CPU cores)
-Memory: proportional to core ratio (total 8GB per ratio)
+Ratios: 1:1 / 2:1 / 1:2 / 5:1 / 1:5 (AI:NonAI CPU cores)
+Memory: proportional to core ratio / cpu.max quota proportional to core count
+Execution: direct cgroup.procs registration (no systemd-run), cpuset asserted per ratio
 
 Ratio details:
   1:1  → AI=cpuset 0-1 (2 cores, 4GB) | NonAI=cpuset 2-3 (2 cores, 4GB)
   2:1  → AI=cpuset 0-2 (3 cores, 6GB) | NonAI=cpuset 3   (1 core,  2GB)
   1:2  → AI=cpuset 0   (1 core,  2GB) | NonAI=cpuset 1-3 (3 cores, 6GB)
+  5:1  → AI=cpuset 0-4 (5 cores,10GB) | NonAI=cpuset 5   (1 core,  2GB)
+  1:5  → AI=cpuset 0   (1 core,  2GB) | NonAI=cpuset 1-5 (5 cores,10GB)
 
 Workload pairs per ratio:
   YOLO+Node.js, ResNet+Node.js, GPT2+Node.js, YOLO+ResNet
@@ -308,6 +385,45 @@ Workload pairs per ratio:
 Hardware: Alienware Aurora R12 (i7-11700F 8c/16t, RTX 3060 x2, 32GB DDR4)
 EOF
 chown $REAL_UID:$REAL_GID "$LOG_DIR/config.txt"
+
+########################################
+# 스모크 테스트 (~1.5분) — 실패 시 즉시 중단 (장시간 무효 run 방지)
+########################################
+phase "Phase S: 스모크 테스트"
+configure_cgroup_ratio "0-1" 4 "2-3" 4
+SMOKE_FAIL=0
+
+info "S1: YOLO (20s)"
+start_ai_workload "yolo_medium" 0 "yolo.slice" 20 "WL_A_PID"
+sleep 20; stop_workloads
+grep -q "FileNotFoundError\|Traceback\|FATAL\|Job failed" "$LOG_DIR/yolo_medium_gpu0_yolo.slice.log" 2>/dev/null \
+    && { warn "  ✗ YOLO 실패"; SMOKE_FAIL=1; } \
+    || { grep -q "Ultralytics" "$LOG_DIR/yolo_medium_gpu0_yolo.slice.log" 2>/dev/null \
+         && log "  ✓ YOLO OK" || { warn "  ✗ YOLO 마커 없음"; SMOKE_FAIL=1; }; }
+
+info "S2: GPT2 (25s)"
+start_ai_workload "gpt2" 0 "yolo.slice" 25 "WL_A_PID"
+sleep 25; stop_workloads
+grep -q "\[GPT-2\]" "$LOG_DIR/gpt2_gpu0_yolo.slice.log" 2>/dev/null \
+    && log "  ✓ GPT2 OK" || { warn "  ✗ GPT2 실패"; SMOKE_FAIL=1; }
+
+info "S3: Node.js (12s)"
+start_nodejs_server "server_heavy.js"
+sleep 3
+if curl -s --max-time 3 "http://localhost:3000/" >/dev/null 2>&1 \
+   && [ -n "$(cat "$NODEJS_CGROUP/cgroup.procs" 2>/dev/null)" ]; then
+    log "  ✓ Node.js OK (응답 + nodejs.slice 등록)"
+else
+    warn "  ✗ Node.js 실패 → $LOG_DIR/nodejs_server.log"; SMOKE_FAIL=1
+fi
+stop_workloads
+
+if [ "$SMOKE_FAIL" -ne 0 ]; then
+    echo -e "${RED}스모크 테스트 실패 — 본 실험을 시작하지 않습니다.${NC}"
+    exit 1
+fi
+log "스모크 테스트 통과 — 본 실험 시작"
+drop_caches; sleep $COOLDOWN
 
 EXPERIMENT_START=$SECONDS
 
