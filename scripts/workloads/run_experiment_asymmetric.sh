@@ -467,6 +467,15 @@ start_ai_workload "gpt2" 0 "yolo.slice" $WORKLOAD_DURATION "WL_A_PID"
 wait_loggers; stop_workloads; drop_caches
 sleep $COOLDOWN
 
+# Solo AI: ResNet @GPU1 — AI+AI(YOLO+ResNet) 검증용 디바이스 일치 기준
+# (GPU0/GPU1 전력 특성이 달라 GPU0 solo로는 GPU1 배치 검증 불가 — 3-way에서 실증)
+phase "Phase 3b: ResNet Solo (GPU1, nodejs.slice) - ${WORKLOAD_DURATION}s"
+start_loggers "solo_resnet_gpu1_1to1" $WORKLOAD_DURATION
+sleep 2
+start_ai_workload "resnet18" 1 "nodejs.slice" $WORKLOAD_DURATION "WL_B_PID"
+wait_loggers; stop_workloads; drop_caches
+sleep $COOLDOWN
+
 # Solo NonAI: Node.js
 phase "Phase 4: Node.js Solo - ${WORKLOAD_DURATION}s"
 configure_cgroup_ratio "0-1" 4 "2-3" 4  # 1:1로 초기화
