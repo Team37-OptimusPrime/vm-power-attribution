@@ -192,8 +192,51 @@ reset_slice() {
         rmdir "$child" 2>/dev/null || warn "자식 cgroup 제거 실패: $child (프로세스 잔존?)"
     done
     # 하위 컨트롤러 비활성화 → 프로세스를 직접 붙일 수 있는 leaf 상태로 복귀
-    echo "-cpuset -memory -cpu -io" > "$cg/cgroup.subtree_control" 2>/dev/null || true
+    # systemd가 이 slice를 유닛으로 알고 있으면 명시적으로 내려서 재간섭 차단
+    systemctl stop "$1" 2>/dev/null || true
+    # 켜져 있는 모든 하위 컨트롤러 해제 (pids 포함 — 하드코딩 목록은 pids를 놓쳤었음)
+    local c
+    for c in $(cat "$cg/cgroup.subtree_control" 2>/dev/null); do
+        echo "-$c" > "$cg/cgroup.subtree_control" 2>/dev/null || true
+    done
 }
+
+########################################
+# attach 가드 — subtree 컨트롤러가 하나라도 켜져 있으면 cgroup v2
+# internal-node 규칙 때문에 cgroup.procs 쓰기가 EBUSY로 실패한다.
+# systemd가 slice가 비워질 때마다 +pids를 다시 켜므로(TasksAccounting),
+# 모든 attach 직전에 호출해 무력화한다. (asym run1~3 실패 원인 실증)
+########################################
+clear_subtree() {
+    local cg=$1 c
+    for c in $(cat "$cg/cgroup.subtree_control" 2>/dev/null); do
+        echo "-$c" > "$cg/cgroup.subtree_control" 2>/dev/null || true
+    done
+}
+
+########################################
+# attach_self <cgroup경로> — 서브셸 안에서 자기 자신($BASHPID)을 등록.
+# 1차 실패 시 상태를 로그에 남기고 subtree 컨트롤러를 정리한 뒤 1회 재시도.
+# (asym run1~3에서 attach가 실행 중에만 일시적으로 실패하는 현상 실증 —
+#  2차도 실패하면 errno가 로그에 그대로 노출된다)
+########################################
+attach_self() {
+    local cg=$1 c
+    if echo $BASHPID > "$cg/cgroup.procs" 2>/dev/null; then
+        return 0
+    fi
+    echo "[WARN] attach 1차 실패: $cg"
+    echo "  -- subtree=[$(cat $cg/cgroup.subtree_control 2>&1)]"
+    echo "  -- children=[$(ls -d $cg/*/ 2>/dev/null | tr '\n' ' ')]"
+    echo "  -- cpus.eff=[$(cat $cg/cpuset.cpus.effective 2>&1)] type=[$(cat $cg/cgroup.type 2>&1)]"
+    for c in $(cat "$cg/cgroup.subtree_control" 2>/dev/null); do
+        echo "-$c" > "$cg/cgroup.subtree_control" 2>/dev/null || true
+    done
+    sleep 0.5
+    echo $BASHPID > "$cg/cgroup.procs" && echo "[INFO] attach 재시도 성공"
+}
+
+
 
 ########################################
 # CPU 주파수 고정
@@ -259,7 +302,8 @@ done"
     # $$를 쓰면 실험 스크립트 전체가 slice로 이동해 이후 모든 phase가 오염된다
     # (run1에서 실제 발생). 반드시 $BASHPID(서브셸 자신)를 사용한다.
     # setpriv: sudo와 달리 PAM을 타지 않아 cgroup 소속이 절대 바뀌지 않는다.
-    ( if ! echo $BASHPID > "$cg/cgroup.procs"; then
+    clear_subtree "$cg"
+    ( if ! attach_self "$cg"; then
           echo "[FATAL] cgroup attach 실패: $cg — reset_slice 미실행 또는 슬라이스 오염"
           exit 1
       fi
@@ -283,7 +327,8 @@ start_nodejs_3way() {
     # 서버를 work.slice에서 실행 — attach 실패를 절대 조용히 넘기지 않는다
     # (run2에서 || true 때문에 Node.js가 cgroup 밖에서 돌아 사용량이 통째로 누락됨)
     cd "$WORKLOAD_DIR"
-    ( if ! echo $BASHPID > "$WORK_CGROUP/cgroup.procs"; then
+    clear_subtree "$WORK_CGROUP"
+    ( if ! attach_self "$WORK_CGROUP"; then
           echo "[FATAL] work.slice attach 실패 — Node.js가 cgroup 밖에서 실행됨"
           exit 1
       fi
@@ -327,7 +372,8 @@ start_ffmpeg_3way() {
     # 실제 발생: work.slice 실패 + work2.slice 891% CPU).
     # → cgroup.procs 직접 등록 ($BASHPID — $$ 금지) 방식 사용.
     # ffmpeg_encode.py는 표준 라이브러리만 사용하므로 venv 불필요.
-    ( if ! echo $BASHPID > "$cg/cgroup.procs"; then
+    clear_subtree "$cg"
+    ( if ! attach_self "$cg"; then
           echo "[FATAL] cgroup attach 실패: $cg"
           exit 1
       fi

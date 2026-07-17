@@ -143,8 +143,51 @@ reset_slice() {
         sleep 0.3
         rmdir "$child" 2>/dev/null || warn "자식 cgroup 제거 실패: $child (프로세스 잔존?)"
     done
-    echo "-cpuset -memory -cpu -io" > "$cg/cgroup.subtree_control" 2>/dev/null || true
+    # systemd가 이 slice를 유닛으로 알고 있으면 명시적으로 내려서 재간섭 차단
+    systemctl stop "$1" 2>/dev/null || true
+    # 켜져 있는 모든 하위 컨트롤러 해제 (pids 포함 — 하드코딩 목록은 pids를 놓쳤었음)
+    local c
+    for c in $(cat "$cg/cgroup.subtree_control" 2>/dev/null); do
+        echo "-$c" > "$cg/cgroup.subtree_control" 2>/dev/null || true
+    done
 }
+
+########################################
+# attach 가드 — subtree 컨트롤러가 하나라도 켜져 있으면 cgroup v2
+# internal-node 규칙 때문에 cgroup.procs 쓰기가 EBUSY로 실패한다.
+# systemd가 slice가 비워질 때마다 +pids를 다시 켜므로(TasksAccounting),
+# 모든 attach 직전에 호출해 무력화한다. (asym run1~3 실패 원인 실증)
+########################################
+clear_subtree() {
+    local cg=$1 c
+    for c in $(cat "$cg/cgroup.subtree_control" 2>/dev/null); do
+        echo "-$c" > "$cg/cgroup.subtree_control" 2>/dev/null || true
+    done
+}
+
+########################################
+# attach_self <cgroup경로> — 서브셸 안에서 자기 자신($BASHPID)을 등록.
+# 1차 실패 시 상태를 로그에 남기고 subtree 컨트롤러를 정리한 뒤 1회 재시도.
+# (asym run1~3에서 attach가 실행 중에만 일시적으로 실패하는 현상 실증 —
+#  2차도 실패하면 errno가 로그에 그대로 노출된다)
+########################################
+attach_self() {
+    local cg=$1 c
+    if echo $BASHPID > "$cg/cgroup.procs" 2>/dev/null; then
+        return 0
+    fi
+    echo "[WARN] attach 1차 실패: $cg"
+    echo "  -- subtree=[$(cat $cg/cgroup.subtree_control 2>&1)]"
+    echo "  -- children=[$(ls -d $cg/*/ 2>/dev/null | tr '\n' ' ')]"
+    echo "  -- cpus.eff=[$(cat $cg/cpuset.cpus.effective 2>&1)] type=[$(cat $cg/cgroup.type 2>&1)]"
+    for c in $(cat "$cg/cgroup.subtree_control" 2>/dev/null); do
+        echo "-$c" > "$cg/cgroup.subtree_control" 2>/dev/null || true
+    done
+    sleep 0.5
+    echo $BASHPID > "$cg/cgroup.procs" && echo "[INFO] attach 재시도 성공"
+}
+
+
 
 ########################################
 # cgroup 자원 설정 (phase3와 동일: 2코어/4GB + cpu.max 200%)
@@ -200,7 +243,8 @@ run_in_cgroup() {
     local cg="$CGROUP_ROOT/$slice"
 
     if [ "$as_user" = "1" ]; then
-        ( if ! echo $BASHPID > "$cg/cgroup.procs"; then
+        clear_subtree "$cg"
+    ( if ! attach_self "$cg"; then
               echo "[FATAL] cgroup attach 실패: $cg"
               exit 1
           fi
@@ -209,7 +253,8 @@ run_in_cgroup() {
               env HOME="/home/$REAL_USER" PYTHONUNBUFFERED=1 "$@"
         ) > "$log_file" 2>&1 &
     else
-        ( if ! echo $BASHPID > "$cg/cgroup.procs"; then
+        clear_subtree "$cg"
+    ( if ! attach_self "$cg"; then
               echo "[FATAL] cgroup attach 실패: $cg"
               exit 1
           fi
@@ -305,7 +350,8 @@ start_fio_bursty() {
 start_nodejs() {
     local duration=$1
     cd "$WORKLOAD_DIR"
-    ( if ! echo $BASHPID > "$NODEJS_CGROUP/cgroup.procs"; then
+    clear_subtree "$NODEJS_CGROUP"
+    ( if ! attach_self "$NODEJS_CGROUP"; then
           echo "[FATAL] nodejs.slice attach 실패 — Node.js가 cgroup 밖에서 실행됨"
           echo "-- 진단: subtree_control=[$(cat $NODEJS_CGROUP/cgroup.subtree_control 2>&1)]"
           echo "-- cpus.effective=[$(cat $NODEJS_CGROUP/cpuset.cpus.effective 2>&1)]"
