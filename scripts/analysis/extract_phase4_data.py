@@ -103,6 +103,20 @@ def get_stable(rows):
             if TRIM_START <= (parse_ts(r["timestamp"]) - t0).total_seconds() <= total - TRIM_END]
 
 
+def avg_bounded(rows, col, lo, hi):
+    """물리적으로 가능한 범위만 평균 — RAPL energy 카운터 래핑 시 한 샘플이
+    수십만 W 음수로 튀는 것을 차단 (asym2 run3 yolo_resnet_5to1에서 실증: -242,642W)"""
+    v = []
+    for r in rows:
+        try:
+            x = float(r[col])
+            if lo <= x <= hi:
+                v.append(x)
+        except (ValueError, KeyError):
+            pass
+    return sum(v) / len(v) if v else 0.0
+
+
 def avg(rows, col):
     vals = []
     for r in rows:
@@ -186,8 +200,8 @@ def main():
             "type": ptype, "wls": wls,
             "dur": (t1-t0).total_seconds(),
             "wall": rpict_avg(rpict, t0, t1),
-            "cpu": avg(host, "rapl_package_w"),
-            "gpu0": avg(host, "gpu0_power_w"), "gpu1": avg(host, "gpu1_power_w"),
+            "cpu": avg_bounded(host, "rapl_package_w", 0, 500),
+            "gpu0": avg_bounded(host, "gpu0_power_w", 0, 400), "gpu1": avg_bounded(host, "gpu1_power_w", 0, 400),
             "gpu0_util": avg(host, "gpu0_util_pct"), "gpu1_util": avg(host, "gpu1_util_pct"),
             "cg": cg,
         }
